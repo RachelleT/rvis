@@ -17,6 +17,7 @@ from vtkmodules.vtkFiltersCore import vtkFlyingEdges3D, vtkStripper
 from vtkmodules.vtkImagingCore import vtkImageMapToColors
 from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera
 
+
 # Press ⌃R to execute it or replace it with your code.
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
 
@@ -49,7 +50,7 @@ class AppWindow(QMainWindow):
         file = bar.addMenu('File')
         file_directory = self.create_action('Open Directory', 'icons/directory_icon.png', 'Ctrl+D', self.file_open_dir)
         file_image = self.create_action('Open Image', 'icons/upload_icon.png', 'Ctrl+N', self.file_open_img)
-        #file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
+        # file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
         self.add_action(file, (file_directory, file_image))
 
         view = bar.addMenu('View')
@@ -147,7 +148,7 @@ class AppWindow(QMainWindow):
         self.reader.Update()
         return self.reader.GetOutput()
 
-    def showStateCB(self, state): # show state of checkbox
+    def showStateCB(self, state):  # show state of checkbox
         if state == QtCore.Qt.Checked:
             print('Checked')
         else:
@@ -206,10 +207,12 @@ class AppWindow(QMainWindow):
             self.vtk(self.reader.GetOutput(), "d")
 
     def file_open_img(self):
-        self.filename = QtWidgets.QFileDialog.getOpenFileName(self, "Select File", "/desktop", "Images (*.jpeg *.jpg "
-                                                                                            "*nii *gz)")
-        file = self.readImage(self.filename[0]) # self.filename is a tuple
-        self.vtk(file, "f")
+        self.filename = QtWidgets.QFileDialog.getOpenFileName(self, "Select File", "Images (*.jpeg *.jpg "
+                                                                                   "*nii *gz)")
+
+        if self.filename[0] != "":
+            file = self.readImage(self.filename[0])  # self.filename is a tuple
+            self.vtk(file, "f")
 
     def vtk(self, filename, flag):
 
@@ -248,9 +251,9 @@ class AppWindow(QMainWindow):
         style.SetInteractionModeToImageSlicing()
         self.irenAxl.SetInteractorStyle(style)
 
-        #cam = self.viewer.GetRenderer().GetActiveCamera()
-        #cam.SetPosition(0, 0, -1)
-        #cam.SetViewUp(0, -1, 0)
+        # cam = self.viewer.GetRenderer().GetActiveCamera()
+        # cam.SetPosition(0, 0, -1)
+        # cam.SetViewUp(0, -1, 0)
 
         # calculate index of middle slice in the dicom image
         maxSlice = self.viewer.GetSliceMax()
@@ -560,7 +563,8 @@ class AppWindow(QMainWindow):
             image2 = vtkImageData()
             image2.ShallowCopy(AppWindow.allfiles[1])
 
-            checkerboard = sitk.CheckerBoard(vtk2sitk(image2), vtk2sitk(image1), (self.checkerboardD, self.checkerboardD, self.checkerboardD))
+            checkerboard = sitk.CheckerBoard(vtk2sitk(image2), vtk2sitk(image1),
+                                             (self.checkerboardD, self.checkerboardD, self.checkerboardD))
 
             self.vtk(sitk2vtk(checkerboard), "c")
 
@@ -592,15 +596,15 @@ class AppWindow(QMainWindow):
             green = [0, 255, 0]
 
             background = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
-                                         labelImage=sitk.Cast(mask, sitk.sitkUInt8),
-                                         opacity=0.8, backgroundValue=0)
+                                           labelImage=sitk.Cast(mask, sitk.sitkUInt8),
+                                           opacity=0.8, backgroundValue=0)
 
             mask = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
-                                          labelImage=sitk.Cast(mask, sitk.sitkUInt8),
-                                          opacity=0.8, backgroundValue=-1.0, colormap=green)
+                                     labelImage=sitk.Cast(mask, sitk.sitkUInt8),
+                                     opacity=0.8, backgroundValue=-1.0, colormap=green)
 
-            #dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
-            #print(dice_score)
+            # dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
+            # print(dice_score)
 
             image_blender = vtk.vtkImageBlend()
             image_blender.SetBlendModeToCompound()
@@ -744,10 +748,10 @@ class AppWindow(QMainWindow):
         # TAB PLUGINS
         w4 = QWidget()
         self.grid_p = QGridLayout()
-        #self.grid_d.setSpacing(5)
+        # self.grid_d.setSpacing(5)
 
-        #filename = 'Unknown'
-        #self.add_dataset(filename)
+        # filename = 'Unknown'
+        # self.add_dataset(filename)
 
         cb_btn = QPushButton('Checkerboard', self)
         tileSize = QLabel('Tile Size:')
@@ -761,14 +765,14 @@ class AppWindow(QMainWindow):
         seg_btn.setFlat(True)
         seg_btn.clicked.connect(self.segmentation)
         restart_button = QPushButton("Restart")
-        #restart_button.clicked.connect(self.restart)
+        # restart_button.clicked.connect(self.restart)
 
         self.grid_p.addWidget(cb_btn)
         self.grid_p.addWidget(tileSize, 1, 0)
         self.grid_p.addWidget(self.tileSizeCB, 1, 1)
         self.grid_p.addWidget(cbTileSize, 1, 2)
         self.grid_p.addWidget(seg_btn)
-        #self.grid_p.addWidget(restart_button)
+        # self.grid_p.addWidget(restart_button)
 
         w4.setLayout(self.grid_p)
         toolbox.addItem(w4, 'Plugins')
@@ -808,15 +812,15 @@ class AppWindow(QMainWindow):
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, dockWid)
 
     def add_dataset(self, filename):
-        #file_loc = QLabel('File Location ' + str(AppWindow.count) + ': ')
-        #location = QLabel(filename)
+        # file_loc = QLabel('File Location ' + str(AppWindow.count) + ': ')
+        # location = QLabel(filename)
 
-        #self.grid_d.addWidget(file_loc, AppWindow.count, 0)
-        #self.grid_d.addWidget(location, AppWindow.count, 1)
+        # self.grid_d.addWidget(file_loc, AppWindow.count, 0)
+        # self.grid_d.addWidget(location, AppWindow.count, 1)
 
         self.fileCB = QCheckBox(filename.split("/")[-1], self)
         AppWindow.checkboxes.append(self.fileCB)
-        #self.fileCB.setCheckState(Qt.Checked)
+        # self.fileCB.setCheckState(Qt.Checked)
         self.fileCB.stateChanged.connect(self.showStateCB)
 
         self.grid_d.addWidget(self.fileCB)
@@ -898,6 +902,7 @@ class AppWindow(QMainWindow):
         self.volume.SetPosition(x, y, z)
         self.ren.Render()
         self.ren.EraseOn()
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
