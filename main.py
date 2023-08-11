@@ -47,9 +47,10 @@ class AppWindow(QMainWindow):
     def menu_bar(self):
         bar = self.menuBar()
         file = bar.addMenu('File')
-        file_new = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+N', self.file_open_thr)
-        file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
-        self.add_action(file, (file_new, file_exit))
+        file_directory = self.create_action('Open Directory', 'icons/directory_icon.png', 'Ctrl+D', self.file_open_dir)
+        file_image = self.create_action('Open Image', 'icons/upload_icon.png', 'Ctrl+N', self.file_open_img)
+        #file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
+        self.add_action(file, (file_directory, file_image))
 
         view = bar.addMenu('View')
         view_shortcut = self.create_action('Show navigation', 'icons/navi_icon.png', 'F4', self.tool_bar)
@@ -61,7 +62,7 @@ class AppWindow(QMainWindow):
 
     def tool_bar(self):
         navToolBar = self.addToolBar("Navigation")
-        newAction = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+N', self.file_open_thr)
+        newAction = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+D', self.file_open_dir)
         tileAction = self.create_action('Tiled Mode', 'icons/tile_icon.png', 'Ctrl+T', self.show_tiled)
         toolAction = self.create_action('Show tool widget', 'icons/tool_icon.png', 'F2', self.docker_widget)
 
@@ -193,7 +194,7 @@ class AppWindow(QMainWindow):
     def show_tiled(self):
         self.mdi.tileSubWindows()
 
-    def file_open_thr(self):
+    def file_open_dir(self):
         AppWindow.count = AppWindow.count + 1
         self.filename = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
 
@@ -203,7 +204,12 @@ class AppWindow(QMainWindow):
             self.reader.Update()
             self.add_dataset(self.filename)
             self.vtk(self.reader.GetOutput(), "d")
-            #self.readImage(self.filename)
+
+    def file_open_img(self):
+        self.filename = QtWidgets.QFileDialog.getOpenFileName(self, "Select File", "/desktop", "Images (*.jpeg *.jpg "
+                                                                                            "*nii *gz)")
+        file = self.readImage(self.filename[0]) # self.filename is a tuple
+        self.vtk(file, "f")
 
     def vtk(self, filename, flag):
 
