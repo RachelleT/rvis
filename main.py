@@ -2,6 +2,7 @@
 
 import sys
 import SimpleITK as sitk
+from PyQt5.QtGui import QPixmap
 from SimpleITK.utilities import sitk2vtk, vtk2sitk
 import vtk
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMdiArea, QMdiSubWindow, \
@@ -30,7 +31,7 @@ class AppWindow(QMainWindow):
         self.setWindowIcon(QtGui.QIcon('icons/schwi_icon.png'))
         self.setWindowTitle("RVis")
 
-        #self.setAcceptDrops(True)
+        self.setAcceptDrops(True)
         self.checkerboardD = 0
 
         self.mdi = QMdiArea()
@@ -85,25 +86,19 @@ class AppWindow(QMainWindow):
                 dest.addAction(action)
 
     def dragEnterEvent(self, event):
-        event.accept()
-
-    def dragMoveEvent(self, event):
-        m = event.mimeData()
-        if m.hasUrls():
+        if event.mimeData().hasImage:
             event.accept()
-            return
-        event.ignore()
+        else:
+            event.ignore()
 
     def dropEvent(self, event):
-        if event.mimeData():
+        if event.mimeData().hasImage:
             event.setDropAction(QtCore.Qt.CopyAction)
             file_path = event.mimeData().urls()[0].toLocalFile()
             AppWindow.filepaths.append(file_path)
             file = self.readImage(file_path)
             AppWindow.allfiles.append(file)
             self.add_dataset(file_path)
-            imagename = file_path.split("/")[-1]
-            print(AppWindow.count)
             if AppWindow.count == 1:
                 self.vtk(file, "f")
             if AppWindow.count == 2:
@@ -147,7 +142,7 @@ class AppWindow(QMainWindow):
             sys.stderr.write("cannot read file type %s\n" % (ext,))
             sys.exit(1)
 
-        self.reader.SetFileName(filename.split("/")[-1])
+        self.reader.SetFileName(filename)
         self.reader.Update()
         return self.reader.GetOutput()
 
@@ -783,7 +778,6 @@ class AppWindow(QMainWindow):
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dockWid)
 
     def docker_widgetR(self):
-        self.setAcceptDrops(True)
 
         dockWid = QDockWidget('Data Manager', self)
         dockWid.setFixedWidth(300)
