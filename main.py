@@ -7,7 +7,7 @@ from SimpleITK.utilities import sitk2vtk, vtk2sitk
 import vtk
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMdiArea, QMdiSubWindow, \
     QLabel, QPushButton, QDockWidget, QGridLayout, QVBoxLayout, QLineEdit, QWidget, QToolBox, \
-    QCheckBox, QFrame, QScrollBar, QMessageBox
+    QCheckBox, QFrame, QScrollBar, QMessageBox, QListWidget
 from PyQt5 import QtCore, QtGui, QtWidgets
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.vtkCommonColor import vtkNamedColors
@@ -152,11 +152,8 @@ class AppWindow(QMainWindow):
         self.reader.Update()
         return self.reader.GetOutput()
 
-    def showStateCB(self, state):  # show state of checkbox
-        if state == QtCore.Qt.Checked:
-            print('Checked')
-        else:
-            print('Unchecked')
+    def showStateFileButton(self):  # file button
+        print("to do")
 
     def sliderEvent(self):
         self.sliderPosition = self.vScrollBar.sliderPosition()
@@ -250,7 +247,6 @@ class AppWindow(QMainWindow):
             writer.SetQFormMatrix(self.reader.GetQFormMatrix())
             writer.SetSFormMatrix(self.reader.GetSFormMatrix())
             writer.Write()
-
 
     def vtk(self, filename, flag):
 
@@ -827,40 +823,26 @@ class AppWindow(QMainWindow):
 
     def docker_widgetR(self):
 
-        dockWid = QDockWidget('Data Manager', self)
-        dockWid.setFixedWidth(300)
+        filesDock = QDockWidget('Data Manager', self)
+        filesDock.setFixedWidth(300)
+        filesDock.setFeatures(QDockWidget.NoDockWidgetFeatures)
 
-        layout = QGridLayout()
-        toolbox = QToolBox()
-        layout.addWidget(toolbox, 0, 0)
+        self.filesListWidget = QListWidget()
 
-        # TAB DATASET
-        filetab = QWidget()
-        self.grid_d = QVBoxLayout()
-
-        filetab.setLayout(self.grid_d)
-        toolbox.addItem(filetab, 'Files')
-
-        #############################
-        toolbox.setCurrentIndex(0)
-        self.setLayout(layout)
-
-        dockWid.setWidget(toolbox)
-        dockWid.setFloating(False)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, dockWid)
+        filesDock.setWidget(self.filesListWidget)
+        filesDock.setFloating(False)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, filesDock)
 
     def add_dataset(self, filename):
 
-        self.fileCB = QCheckBox(filename.split("/")[-1], self)
-        AppWindow.checkboxes.append(self.fileCB)
-        # self.fileCB.setCheckState(Qt.Checked)
-        self.fileCB.stateChanged.connect(self.showStateCB)
+        name = filename.split("/")[-1]
+        self.fileButton = QPushButton(name, self)
+        self.fileButton.clicked.connect(self.showStateFileButton)
+        self.fileButton.setFlat(True)
 
-        self.grid_d.addWidget(self.fileCB)
+        self.filesListWidget.addItem(name)
 
         AppWindow.count = AppWindow.count + 1
-
-        return self.grid_d
 
     def zoom_in(self):
         self.ren.GetActiveCamera().Zoom(2.2)
