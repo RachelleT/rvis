@@ -1,8 +1,8 @@
 # This is a sample Python script.
-
+import os
 import sys
 import SimpleITK as sitk
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QImage
 from SimpleITK.utilities import sitk2vtk, vtk2sitk
 import vtk
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMdiArea, QMdiSubWindow, \
@@ -14,8 +14,11 @@ from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkCommonCore import vtkLookupTable
 from vtkmodules.vtkCommonDataModel import vtkImageData
 from vtkmodules.vtkFiltersCore import vtkFlyingEdges3D, vtkStripper
+from vtkmodules.vtkIOImage import vtkBMPWriter, vtkPNMWriter, vtkJPEGWriter, vtkTIFFWriter, vtkPNGWriter, \
+    vtkNIFTIImageWriter
+from vtkmodules.vtkIOXML import vtkXMLImageDataWriter
 from vtkmodules.vtkImagingCore import vtkImageMapToColors
-from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera
+from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera, vtkWindowToImageFilter
 
 
 # Press ⌃R to execute it or replace it with your code.
@@ -50,8 +53,9 @@ class AppWindow(QMainWindow):
         file = bar.addMenu('File')
         file_directory = self.create_action('Open Directory', 'icons/directory_icon.png', 'Ctrl+D', self.file_open_dir)
         file_image = self.create_action('Open Image', 'icons/upload_icon.png', 'Ctrl+N', self.file_open_img)
+        save_image = self.create_action('Save Image', 'icons/save_icon.png', 'Ctrl+S', self.file_save_img)
         # file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
-        self.add_action(file, (file_directory, file_image))
+        self.add_action(file, (file_directory, file_image, save_image))
 
         view = bar.addMenu('View')
         view_shortcut = self.create_action('Show navigation', 'icons/navi_icon.png', 'F4', self.tool_bar)
@@ -212,7 +216,41 @@ class AppWindow(QMainWindow):
 
         if self.filename[0] != "":
             file = self.readImage(self.filename[0])  # self.filename is a tuple
+            self.add_dataset(self.filename[0])
             self.vtk(file, "f")
+
+    def file_save_img(self):
+        # selecting file path
+        filePath, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Image", "",
+                                                  "PNG(*.png);;JPEG(*.jpg *.jpeg);;NII(*.nii);;All Files(*.*) ")
+
+        if filePath:
+            # Select the writer to use.
+            path, ext = os.path.splitext(filePath)
+            ext = ext.lower()
+
+            if ext in ('.jpg', '.jpeg'):
+                writer = vtkJPEGWriter()
+            elif ext in ('.tif', '.tiff', ".lsm"):
+                writer = vtkTIFFWriter()
+            elif ext in ('.png',):
+                writer = vtkPNGWriter()
+            elif ext in ('.nii', '.gz'):
+                writer = vtkNIFTIImageWriter()
+                # copy most information directory from the header
+                writer.SetNIFTIHeader(self.reader.GetNIFTIHeader())
+            else:
+                print("to be updated")
+
+            writer.SetInputConnection(self.reader.GetOutputPort()) # self.reader to be updated
+            writer.SetFileName(filePath)
+            # this information will override the reader's header
+            writer.SetQFac(self.reader.GetQFac())
+            writer.SetTimeDimension(self.reader.GetTimeDimension())
+            writer.SetQFormMatrix(self.reader.GetQFormMatrix())
+            writer.SetSFormMatrix(self.reader.GetSFormMatrix())
+            writer.Write()
+
 
     def vtk(self, filename, flag):
 
@@ -571,7 +609,7 @@ class AppWindow(QMainWindow):
     def checker_board_tile(self):
         self.checkerboardD = int(self.tileSizeCB.text())
 
-    def segmentation(self):
+    def overlap(self):
         if len(AppWindow.allfiles) == 1:
             QMessageBox.about(self, "Oops!", "A mask is needed for this feature.")
         else:
@@ -763,7 +801,7 @@ class AppWindow(QMainWindow):
         cb_btn.setFlat(True)
         seg_btn = QPushButton('Label Overlap', self)
         seg_btn.setFlat(True)
-        seg_btn.clicked.connect(self.segmentation)
+        seg_btn.clicked.connect(self.overlap)
         restart_button = QPushButton("Restart")
         # restart_button.clicked.connect(self.restart)
 
@@ -812,11 +850,6 @@ class AppWindow(QMainWindow):
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, dockWid)
 
     def add_dataset(self, filename):
-        # file_loc = QLabel('File Location ' + str(AppWindow.count) + ': ')
-        # location = QLabel(filename)
-
-        # self.grid_d.addWidget(file_loc, AppWindow.count, 0)
-        # self.grid_d.addWidget(location, AppWindow.count, 1)
 
         self.fileCB = QCheckBox(filename.split("/")[-1], self)
         AppWindow.checkboxes.append(self.fileCB)
