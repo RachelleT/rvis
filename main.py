@@ -1,20 +1,25 @@
 # This is a sample Python script.
-
+import os
 import sys
 import SimpleITK as sitk
+from PyQt5.QtGui import QImage
 from SimpleITK.utilities import sitk2vtk, vtk2sitk
 import vtk
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMdiArea, QMdiSubWindow, \
     QLabel, QPushButton, QDockWidget, QGridLayout, QVBoxLayout, QLineEdit, QWidget, QToolBox, \
-    QCheckBox, QFrame, QScrollBar, QMessageBox
+    QCheckBox, QFrame, QScrollBar, QMessageBox, QListWidget
 from PyQt5 import QtCore, QtGui, QtWidgets
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkCommonCore import vtkLookupTable
 from vtkmodules.vtkCommonDataModel import vtkImageData
 from vtkmodules.vtkFiltersCore import vtkFlyingEdges3D, vtkStripper
+from vtkmodules.vtkIOImage import vtkBMPWriter, vtkPNMWriter, vtkJPEGWriter, vtkTIFFWriter, vtkPNGWriter, \
+    vtkNIFTIImageWriter
+from vtkmodules.vtkIOXML import vtkXMLImageDataWriter
 from vtkmodules.vtkImagingCore import vtkImageMapToColors
-from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera
+from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera, vtkWindowToImageFilter
+
 
 # Press ⌃R to execute it or replace it with your code.
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
@@ -30,7 +35,7 @@ class AppWindow(QMainWindow):
         self.setWindowIcon(QtGui.QIcon('icons/schwi_icon.png'))
         self.setWindowTitle("RVis")
 
-        #self.setAcceptDrops(True)
+        self.setAcceptDrops(True)
         self.checkerboardD = 0
 
         self.mdi = QMdiArea()
@@ -46,9 +51,11 @@ class AppWindow(QMainWindow):
     def menu_bar(self):
         bar = self.menuBar()
         file = bar.addMenu('File')
-        file_new = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+N', self.file_open_thr)
-        file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
-        self.add_action(file, (file_new, file_exit))
+        file_directory = self.create_action('Open Directory', 'icons/directory_icon.png', 'Ctrl+D', self.file_open_dir)
+        file_image = self.create_action('Open Image', 'icons/upload_icon.png', 'Ctrl+N', self.file_open_img)
+        save_image = self.create_action('Save Image', 'icons/save_icon.png', 'Ctrl+S', self.file_save_img)
+        # file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
+        self.add_action(file, (file_directory, file_image, save_image))
 
         view = bar.addMenu('View')
         view_shortcut = self.create_action('Show navigation', 'icons/navi_icon.png', 'F4', self.tool_bar)
@@ -60,7 +67,7 @@ class AppWindow(QMainWindow):
 
     def tool_bar(self):
         navToolBar = self.addToolBar("Navigation")
-        newAction = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+N', self.file_open_thr)
+        newAction = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+D', self.file_open_dir)
         tileAction = self.create_action('Tiled Mode', 'icons/tile_icon.png', 'Ctrl+T', self.show_tiled)
         toolAction = self.create_action('Show tool widget', 'icons/tool_icon.png', 'F2', self.docker_widget)
 
@@ -85,25 +92,19 @@ class AppWindow(QMainWindow):
                 dest.addAction(action)
 
     def dragEnterEvent(self, event):
-        event.accept()
-
-    def dragMoveEvent(self, event):
-        m = event.mimeData()
-        if m.hasUrls():
+        if event.mimeData().hasImage:
             event.accept()
-            return
-        event.ignore()
+        else:
+            event.ignore()
 
     def dropEvent(self, event):
-        if event.mimeData():
+        if event.mimeData().hasImage:
             event.setDropAction(QtCore.Qt.CopyAction)
             file_path = event.mimeData().urls()[0].toLocalFile()
             AppWindow.filepaths.append(file_path)
             file = self.readImage(file_path)
             AppWindow.allfiles.append(file)
             self.add_dataset(file_path)
-            imagename = file_path.split("/")[-1]
-            print(AppWindow.count)
             if AppWindow.count == 1:
                 self.vtk(file, "f")
             if AppWindow.count == 2:
@@ -147,15 +148,12 @@ class AppWindow(QMainWindow):
             sys.stderr.write("cannot read file type %s\n" % (ext,))
             sys.exit(1)
 
-        self.reader.SetFileName(filename.split("/")[-1])
+        self.reader.SetFileName(filename)
         self.reader.Update()
         return self.reader.GetOutput()
 
-    def showStateCB(self, state): # show state of checkbox
-        if state == QtCore.Qt.Checked:
-            print('Checked')
-        else:
-            print('Unchecked')
+    def showStateFileButton(self):  # file button
+        print("to do")
 
     def sliderEvent(self):
         self.sliderPosition = self.vScrollBar.sliderPosition()
@@ -198,7 +196,7 @@ class AppWindow(QMainWindow):
     def show_tiled(self):
         self.mdi.tileSubWindows()
 
-    def file_open_thr(self):
+    def file_open_dir(self):
         AppWindow.count = AppWindow.count + 1
         self.filename = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
 
@@ -208,7 +206,47 @@ class AppWindow(QMainWindow):
             self.reader.Update()
             self.add_dataset(self.filename)
             self.vtk(self.reader.GetOutput(), "d")
-            #self.readImage(self.filename)
+
+    def file_open_img(self):
+        self.filename = QtWidgets.QFileDialog.getOpenFileName(self, "Select File", "Images (*.jpeg *.jpg "
+                                                                                   "*nii *gz)")
+
+        if self.filename[0] != "":
+            file = self.readImage(self.filename[0])  # self.filename is a tuple
+            self.add_dataset(self.filename[0])
+            self.vtk(file, "f")
+
+    def file_save_img(self):
+        # selecting file path
+        filePath, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Image", "",
+                                                  "PNG(*.png);;JPEG(*.jpg *.jpeg);;NII(*.nii);;All Files(*.*) ")
+
+        if filePath:
+            # Select the writer to use.
+            path, ext = os.path.splitext(filePath)
+            ext = ext.lower()
+
+            if ext in ('.jpg', '.jpeg'):
+                writer = vtkJPEGWriter()
+            elif ext in ('.tif', '.tiff', ".lsm"):
+                writer = vtkTIFFWriter()
+            elif ext in ('.png',):
+                writer = vtkPNGWriter()
+            elif ext in ('.nii', '.gz'):
+                writer = vtkNIFTIImageWriter()
+                # copy most information directory from the header
+                writer.SetNIFTIHeader(self.reader.GetNIFTIHeader())
+            else:
+                print("to be updated")
+
+            writer.SetInputConnection(self.reader.GetOutputPort()) # self.reader to be updated
+            writer.SetFileName(filePath)
+            # this information will override the reader's header
+            writer.SetQFac(self.reader.GetQFac())
+            writer.SetTimeDimension(self.reader.GetTimeDimension())
+            writer.SetQFormMatrix(self.reader.GetQFormMatrix())
+            writer.SetSFormMatrix(self.reader.GetSFormMatrix())
+            writer.Write()
 
     def vtk(self, filename, flag):
 
@@ -247,9 +285,9 @@ class AppWindow(QMainWindow):
         style.SetInteractionModeToImageSlicing()
         self.irenAxl.SetInteractorStyle(style)
 
-        #cam = self.viewer.GetRenderer().GetActiveCamera()
-        #cam.SetPosition(0, 0, -1)
-        #cam.SetViewUp(0, -1, 0)
+        # cam = self.viewer.GetRenderer().GetActiveCamera()
+        # cam.SetPosition(0, 0, -1)
+        # cam.SetViewUp(0, -1, 0)
 
         # calculate index of middle slice in the dicom image
         maxSlice = self.viewer.GetSliceMax()
@@ -559,14 +597,15 @@ class AppWindow(QMainWindow):
             image2 = vtkImageData()
             image2.ShallowCopy(AppWindow.allfiles[1])
 
-            checkerboard = sitk.CheckerBoard(vtk2sitk(image2), vtk2sitk(image1), (self.checkerboardD, self.checkerboardD, self.checkerboardD))
+            checkerboard = sitk.CheckerBoard(vtk2sitk(image2), vtk2sitk(image1),
+                                             (self.checkerboardD, self.checkerboardD, self.checkerboardD))
 
             self.vtk(sitk2vtk(checkerboard), "c")
 
     def checker_board_tile(self):
         self.checkerboardD = int(self.tileSizeCB.text())
 
-    def segmentation(self):
+    def overlap(self):
         if len(AppWindow.allfiles) == 1:
             QMessageBox.about(self, "Oops!", "A mask is needed for this feature.")
         else:
@@ -591,15 +630,15 @@ class AppWindow(QMainWindow):
             green = [0, 255, 0]
 
             background = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
-                                         labelImage=sitk.Cast(mask, sitk.sitkUInt8),
-                                         opacity=0.8, backgroundValue=0)
+                                           labelImage=sitk.Cast(mask, sitk.sitkUInt8),
+                                           opacity=0.8, backgroundValue=0)
 
             mask = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
-                                          labelImage=sitk.Cast(mask, sitk.sitkUInt8),
-                                          opacity=0.8, backgroundValue=-1.0, colormap=green)
+                                     labelImage=sitk.Cast(mask, sitk.sitkUInt8),
+                                     opacity=0.8, backgroundValue=-1.0, colormap=green)
 
-            #dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
-            #print(dice_score)
+            # dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
+            # print(dice_score)
 
             image_blender = vtk.vtkImageBlend()
             image_blender.SetBlendModeToCompound()
@@ -743,10 +782,10 @@ class AppWindow(QMainWindow):
         # TAB PLUGINS
         w4 = QWidget()
         self.grid_p = QGridLayout()
-        #self.grid_d.setSpacing(5)
+        # self.grid_d.setSpacing(5)
 
-        #filename = 'Unknown'
-        #self.add_dataset(filename)
+        # filename = 'Unknown'
+        # self.add_dataset(filename)
 
         cb_btn = QPushButton('Checkerboard', self)
         tileSize = QLabel('Tile Size:')
@@ -758,16 +797,16 @@ class AppWindow(QMainWindow):
         cb_btn.setFlat(True)
         seg_btn = QPushButton('Label Overlap', self)
         seg_btn.setFlat(True)
-        seg_btn.clicked.connect(self.segmentation)
+        seg_btn.clicked.connect(self.overlap)
         restart_button = QPushButton("Restart")
-        #restart_button.clicked.connect(self.restart)
+        # restart_button.clicked.connect(self.restart)
 
         self.grid_p.addWidget(cb_btn)
         self.grid_p.addWidget(tileSize, 1, 0)
         self.grid_p.addWidget(self.tileSizeCB, 1, 1)
         self.grid_p.addWidget(cbTileSize, 1, 2)
         self.grid_p.addWidget(seg_btn)
-        #self.grid_p.addWidget(restart_button)
+        # self.grid_p.addWidget(restart_button)
 
         w4.setLayout(self.grid_p)
         toolbox.addItem(w4, 'Plugins')
@@ -783,47 +822,27 @@ class AppWindow(QMainWindow):
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dockWid)
 
     def docker_widgetR(self):
-        self.setAcceptDrops(True)
 
-        dockWid = QDockWidget('Data Manager', self)
-        dockWid.setFixedWidth(300)
+        filesDock = QDockWidget('Data Manager', self)
+        filesDock.setFixedWidth(300)
+        filesDock.setFeatures(QDockWidget.NoDockWidgetFeatures)
 
-        layout = QGridLayout()
-        toolbox = QToolBox()
-        layout.addWidget(toolbox, 0, 0)
+        self.filesListWidget = QListWidget()
 
-        # TAB DATASET
-        filetab = QWidget()
-        self.grid_d = QVBoxLayout()
-
-        filetab.setLayout(self.grid_d)
-        toolbox.addItem(filetab, 'Files')
-
-        #############################
-        toolbox.setCurrentIndex(0)
-        self.setLayout(layout)
-
-        dockWid.setWidget(toolbox)
-        dockWid.setFloating(False)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, dockWid)
+        filesDock.setWidget(self.filesListWidget)
+        filesDock.setFloating(False)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, filesDock)
 
     def add_dataset(self, filename):
-        #file_loc = QLabel('File Location ' + str(AppWindow.count) + ': ')
-        #location = QLabel(filename)
 
-        #self.grid_d.addWidget(file_loc, AppWindow.count, 0)
-        #self.grid_d.addWidget(location, AppWindow.count, 1)
+        name = filename.split("/")[-1]
+        self.fileButton = QPushButton(name, self)
+        self.fileButton.clicked.connect(self.showStateFileButton)
+        self.fileButton.setFlat(True)
 
-        self.fileCB = QCheckBox(filename.split("/")[-1], self)
-        AppWindow.checkboxes.append(self.fileCB)
-        #self.fileCB.setCheckState(Qt.Checked)
-        self.fileCB.stateChanged.connect(self.showStateCB)
-
-        self.grid_d.addWidget(self.fileCB)
+        self.filesListWidget.addItem(name)
 
         AppWindow.count = AppWindow.count + 1
-
-        return self.grid_d
 
     def zoom_in(self):
         self.ren.GetActiveCamera().Zoom(2.2)
@@ -898,6 +917,7 @@ class AppWindow(QMainWindow):
         self.volume.SetPosition(x, y, z)
         self.ren.Render()
         self.ren.EraseOn()
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
