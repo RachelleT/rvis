@@ -35,6 +35,7 @@ class AppWindow(QMainWindow):
         self.setAcceptDrops(True)
         self.fixedImage = QComboBox()
         self.movingImage = QComboBox()
+        self.maskImage = QComboBox()
 
         self.mdi = QMdiArea()
         self.setCentralWidget(self.mdi)
@@ -573,7 +574,6 @@ class AppWindow(QMainWindow):
 
     def checkerboardFeature(self):
         fixedImageCheckerboard = QLabel('Fixed Image:')
-
         movingImageCheckerboard = QLabel('Moving Image:')
 
         tileSizeCheckerboard = QLabel('Tile Size:')
@@ -603,72 +603,82 @@ class AppWindow(QMainWindow):
         moving = self.movingImage.currentIndex()
 
         size = int(self.tileSizeInput.text())
-        print(size)
 
         if size <= 0:
             QMessageBox.about(self, "Oops!", "Tile size ( > 0 ) is needed for this feature.")
         else:
             self.reloadWindows()
 
-            image1 = vtkImageData()
-            image1.ShallowCopy(AppWindow.allfiles[fixed])
+            fixedimg = vtkImageData()
+            fixedimg.ShallowCopy(AppWindow.allfiles[fixed])
 
-            image2 = vtkImageData()
-            image2.ShallowCopy(AppWindow.allfiles[moving])
+            movingimg = vtkImageData()
+            movingimg.ShallowCopy(AppWindow.allfiles[moving])
 
-            checkerboard = sitk.CheckerBoard(vtk2sitk(image2), vtk2sitk(image1),
+            checkerboard = sitk.CheckerBoard(vtk2sitk(fixedimg), vtk2sitk(movingimg),
                                              (size, size, size))
 
             self.vtk(sitk2vtk(checkerboard), "c")
 
-    def checker_board_tile(self):
-        self.checkerboardD = int(self.tileSizeCB.text())
-
     def overlapFeature(self):
-        if len(AppWindow.allfiles) == 1:
-            QMessageBox.about(self, "Oops!", "A mask is needed for this feature.")
-        else:
 
-            self.mdi.removeSubWindow(self.subSag)
-            self.mdi.removeSubWindow(self.subVol)
-            self.mdi.removeSubWindow(self.subAxl)
-            self.mdi.removeSubWindow(self.subCor)
-            self.ren.EraseOn()
-            self.renVol.EraseOn()
-            self.vtkWidgetVol.update()
+        baseImage = QLabel('Base:')
+        maskImage = QLabel('Mask:')
+        overlapButton = QPushButton('Apply', self)
 
-            image1 = vtkImageData()
-            image1.ShallowCopy(AppWindow.allfiles[0])
+        overlapInput = QWidget()
+        gridOverlap = QGridLayout()
 
-            image2 = vtkImageData()
-            image2.ShallowCopy(AppWindow.allfiles[1])
+        gridOverlap.addWidget(baseImage, 1, 0)
+        gridOverlap.addWidget(self.fixedImage, 1, 1)
+        gridOverlap.addWidget(maskImage, 2, 0)
+        gridOverlap.addWidget(self.maskImage, 2, 1)
+        gridOverlap.addWidget(overlapButton, 3, 0)
 
-            full = vtk2sitk(image1)
-            mask = vtk2sitk(image2)
+        overlapInput.setLayout(gridOverlap)
+        self.dockWidPanel.setWidget(overlapInput)
 
-            green = [0, 255, 0]
+        overlapButton.clicked.connect(self.showOverlap)
 
-            background = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
+
+    def showOverlap(self):
+        fixedBase = self.fixedImage.currentIndex()
+        selectedMask = self.maskImage.currentIndex()
+
+        self.reloadWindows()
+
+        baseimg = vtkImageData()
+        baseimg.ShallowCopy(AppWindow.allfiles[fixedBase])
+
+        maskimg = vtkImageData()
+        maskimg.ShallowCopy(AppWindow.allfiles[selectedMask])
+
+        full = vtk2sitk(baseimg)
+        mask = vtk2sitk(maskimg)
+
+        green = [0, 255, 0]
+
+        background = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
                                            labelImage=sitk.Cast(mask, sitk.sitkUInt8),
                                            opacity=0.8, backgroundValue=0)
 
-            mask = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
+        mask = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
                                      labelImage=sitk.Cast(mask, sitk.sitkUInt8),
                                      opacity=0.8, backgroundValue=-1.0, colormap=green)
 
-            # dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
-            # print(dice_score)
+        # dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
+        # print(dice_score)
 
-            image_blender = vtk.vtkImageBlend()
-            image_blender.SetBlendModeToCompound()
-            image_blender.SetCompoundAlpha(True)
-            image_blender.AddInputData(sitk2vtk(background))
-            image_blender.AddInputData(sitk2vtk(mask))
-            image_blender.SetOpacity(0, 0.5)
-            image_blender.SetOpacity(1, 0.5)
-            image_blender.Update()
+        image_blender = vtk.vtkImageBlend()
+        image_blender.SetBlendModeToCompound()
+        image_blender.SetCompoundAlpha(True)
+        image_blender.AddInputData(sitk2vtk(background))
+        image_blender.AddInputData(sitk2vtk(mask))
+        image_blender.SetOpacity(0, 0.5)
+        image_blender.SetOpacity(1, 0.5)
+        image_blender.Update()
 
-            self.vtk(image_blender.GetOutput(), "s")
+        self.vtk(image_blender.GetOutput(), "s")
 
     def plugin_handler(self):
         item = str(self.pluginsListWidget.selectedItems()[0].text())
@@ -741,6 +751,7 @@ class AppWindow(QMainWindow):
         self.filesListWidget.addItem(name)
         self.fixedImage.addItem(name)
         self.movingImage.addItem(name)
+        self.maskImage.addItem(name)
 
         AppWindow.count = AppWindow.count + 1
 
