@@ -57,12 +57,15 @@ class AppWindow(QMainWindow):
         self.add_action(file, (file_directory, file_image, save_image))
 
         view = bar.addMenu('View')
-        view_shortcut = self.create_action('Show navigation', 'icons/navi_icon.png', 'F4', self.tool_bar)
-        view_variable = self.create_action('Show tool widget', 'icons/tool_icon.png', 'F2', self.docker_widget)
-        # view_restore = self.create_action('Restore', 'icons/restore_icon.png', 'Ctrl+Y', self.file_open)
+        view_mode = self.create_action('Light Mode', 'icons/cube_icon.png', 'F2', self.docker_widget)
         view_tiled = self.create_action('Tiled Mode', 'icons/tile_icon.png', 'Ctrl+T', self.show_tiled)
-        # self.add_action(view, (view_shortcut, view_variable, view_restore, view_tiled))
-        self.add_action(view, (view_shortcut, view_variable, view_tiled))
+        self.add_action(view, (view_mode, view_tiled))
+
+        panels = view.addMenu('Customize panels')
+        axl = self.create_action('Fix Axial View', 'icons/square_icon.png', 'F3', self.updatePanel(1))
+        cor = self.create_action("Fix Coronal View", 'icons/square_icon.png', 'F4', self.updatePanel(2))
+        sag = self.create_action("Fix Sagittal View", 'icons/square_icon.png', 'F5', self.updatePanel(3))
+        self.add_action(panels, (axl, cor, sag))
 
     def tool_bar(self):
         navToolBar = self.addToolBar("Navigation")
@@ -758,79 +761,8 @@ class AppWindow(QMainWindow):
 
         AppWindow.count = AppWindow.count + 1
 
-    def zoom_in(self):
-        self.ren.GetActiveCamera().Zoom(2.2)
-
-    def zoom_out(self):
-        self.ren.GetActiveCamera().Zoom(0.8)
-
-    def thrDaxis(self):
-        axesActor = vtk.vtkAxesActor()
-        self.axes = vtk.vtkOrientationMarkerWidget()
-        self.axes.SetOrientationMarker(axesActor)
-        self.axes.SetInteractor(self.iren)
-        self.axes.EnabledOn()
-        self.axes.InteractiveOn()
-        self.ren.ResetCamera()
-        # self.frame.setLayout(self.vl)
-        # self.setCentralWidget(self.frame)
-        # self.show()
-        # self.iren.Initialize()
-
-    def thrBox(self):
-        outline = vtk.vtkOutlineFilter()
-        outline.SetInputConnection(self.reader.GetOutputPort())
-
-        outlineMapper = vtk.vtkPolyDataMapper()
-        outlineMapper.SetInputConnection(outline.GetOutputPort())
-
-        self.outlineActor = vtk.vtkActor()
-        self.outlineActor.SetMapper(outlineMapper)
-        self.outlineActor.GetProperty().SetColor(1, 1, 1)
-        self.renVol.AddActor(self.outlineActor)
-        self.renVol.ResetCamera()
-
-    def scaleXYZ(self):
-        x = int(self.scaleX.text())
-        y = int(self.scaleY.text())
-        z = int(self.scaleZ.text())
-        self.ren.Render()
-        self.ren.EraseOff()
-        self.outlineActor.SetScale(x, y, z)
-        self.volume.SetScale(x, y, z)
-        self.ren.Render()
-        self.ren.EraseOn()
-
-    def rotateXYZ(self):
-        x = int(self.rotateX.text())
-        y = int(self.rotateY.text())
-        z = int(self.rotateZ.text())
-        self.outlineActor.SetOrientation(x, y, z)
-        self.volume.SetOrientation(x, y, z)
-        self.ren.Render()
-        self.ren.EraseOff()
-
-        self.volume.RotateX(x)
-        self.volume.RotateY(y)
-        self.volume.RotateZ(z)
-        self.outlineActor.RotateX(x)
-        self.outlineActor.RotateY(y)
-        self.outlineActor.RotateZ(z)
-
-        self.ren.Render()
-        self.ren.EraseOn()
-
-    def translateXYZ(self):
-        x = int(self.translateX.text())
-        y = int(self.translateY.text())
-        z = int(self.translateZ.text())
-        # self.volume.SetOrientation(0, 0, 0)
-        self.ren.Render()
-        self.ren.EraseOff()
-        self.outlineActor.SetPosition(x, y, z)
-        self.volume.SetPosition(x, y, z)
-        self.ren.Render()
-        self.ren.EraseOn()
+    def updatePanel(self, p):
+        print(True)
 
 
 # Press the green button in the gutter to run the script.
