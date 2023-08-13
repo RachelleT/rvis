@@ -2,23 +2,20 @@
 import os
 import sys
 import SimpleITK as sitk
-from PyQt5.QtGui import QImage
 from SimpleITK.utilities import sitk2vtk, vtk2sitk
 import vtk
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMdiArea, QMdiSubWindow, \
-    QLabel, QPushButton, QDockWidget, QGridLayout, QVBoxLayout, QLineEdit, QWidget, QToolBox, \
-    QCheckBox, QFrame, QScrollBar, QMessageBox, QListWidget
+    QLabel, QPushButton, QDockWidget, QGridLayout, QLineEdit, QWidget, \
+    QFrame, QScrollBar, QMessageBox, QListWidget, QAbstractItemView, QComboBox
 from PyQt5 import QtCore, QtGui, QtWidgets
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkCommonCore import vtkLookupTable
 from vtkmodules.vtkCommonDataModel import vtkImageData
 from vtkmodules.vtkFiltersCore import vtkFlyingEdges3D, vtkStripper
-from vtkmodules.vtkIOImage import vtkBMPWriter, vtkPNMWriter, vtkJPEGWriter, vtkTIFFWriter, vtkPNGWriter, \
-    vtkNIFTIImageWriter
-from vtkmodules.vtkIOXML import vtkXMLImageDataWriter
+from vtkmodules.vtkIOImage import vtkJPEGWriter, vtkTIFFWriter, vtkPNGWriter, vtkNIFTIImageWriter
 from vtkmodules.vtkImagingCore import vtkImageMapToColors
-from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera, vtkWindowToImageFilter
+from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera
 
 
 # Press ⌃R to execute it or replace it with your code.
@@ -36,7 +33,9 @@ class AppWindow(QMainWindow):
         self.setWindowTitle("RVis")
 
         self.setAcceptDrops(True)
-        self.checkerboardD = 0
+        self.fixedImage = QComboBox()
+        self.movingImage = QComboBox()
+        self.maskImage = QComboBox()
 
         self.mdi = QMdiArea()
         self.setCentralWidget(self.mdi)
@@ -58,12 +57,15 @@ class AppWindow(QMainWindow):
         self.add_action(file, (file_directory, file_image, save_image))
 
         view = bar.addMenu('View')
-        view_shortcut = self.create_action('Show navigation', 'icons/navi_icon.png', 'F4', self.tool_bar)
-        view_variable = self.create_action('Show tool widget', 'icons/tool_icon.png', 'F2', self.docker_widget)
-        # view_restore = self.create_action('Restore', 'icons/restore_icon.png', 'Ctrl+Y', self.file_open)
+        view_mode = self.create_action('Light Mode', 'icons/cube_icon.png', 'F2', self.docker_widget)
         view_tiled = self.create_action('Tiled Mode', 'icons/tile_icon.png', 'Ctrl+T', self.show_tiled)
-        # self.add_action(view, (view_shortcut, view_variable, view_restore, view_tiled))
-        self.add_action(view, (view_shortcut, view_variable, view_tiled))
+        self.add_action(view, (view_mode, view_tiled))
+
+        panels = view.addMenu('Customize panels')
+        axl = self.create_action('Fix Axial View', 'icons/square_icon.png', 'F3', self.updatePanel(1))
+        cor = self.create_action("Fix Coronal View", 'icons/square_icon.png', 'F4', self.updatePanel(2))
+        sag = self.create_action("Fix Sagittal View", 'icons/square_icon.png', 'F5', self.updatePanel(3))
+        self.add_action(panels, (axl, cor, sag))
 
     def tool_bar(self):
         navToolBar = self.addToolBar("Navigation")
@@ -107,14 +109,8 @@ class AppWindow(QMainWindow):
             self.add_dataset(file_path)
             if AppWindow.count == 1:
                 self.vtk(file, "f")
-            if AppWindow.count == 2:
-                self.mdi.removeSubWindow(self.subSag)
-                self.mdi.removeSubWindow(self.subVol)
-                self.mdi.removeSubWindow(self.subAxl)
-                self.mdi.removeSubWindow(self.subCor)
-                self.ren.EraseOn()
-                self.renVol.EraseOn()
-                self.vtkWidgetVol.update()
+            else:
+                self.reloadWindows()
                 self.vtk(file, "f")
             event.accept()
         else:
@@ -181,7 +177,7 @@ class AppWindow(QMainWindow):
         self.vtkWidgetCor.update()
         self.vtkWidgetVol.update()
 
-    def restart(self):
+    def reloadWindows(self):
         self.mdi.removeSubWindow(self.subSag)
         self.mdi.removeSubWindow(self.subVol)
         self.mdi.removeSubWindow(self.subAxl)
@@ -189,9 +185,6 @@ class AppWindow(QMainWindow):
         self.ren.EraseOn()
         self.renVol.EraseOn()
         self.vtkWidgetVol.update()
-        QtCore.QCoreApplication.quit()
-        status = QtCore.QProcess.startDetached(sys.executable, sys.argv)
-        print(status)
 
     def show_tiled(self):
         self.mdi.tileSubWindows()
@@ -207,14 +200,21 @@ class AppWindow(QMainWindow):
             self.add_dataset(self.filename)
             self.vtk(self.reader.GetOutput(), "d")
 
+
     def file_open_img(self):
         self.filename = QtWidgets.QFileDialog.getOpenFileName(self, "Select File", "Images (*.jpeg *.jpg "
                                                                                    "*nii *gz)")
 
         if self.filename[0] != "":
+            AppWindow.filepaths.append(self.filename[0])
             file = self.readImage(self.filename[0])  # self.filename is a tuple
+            AppWindow.allfiles.append(file)
             self.add_dataset(self.filename[0])
-            self.vtk(file, "f")
+            if AppWindow.count == 1:
+                self.vtk(file, "f")
+            else:
+                self.reloadWindows()
+                self.vtk(file, "f")
 
     def file_save_img(self):
         # selecting file path
@@ -250,9 +250,9 @@ class AppWindow(QMainWindow):
 
     def vtk(self, filename, flag):
 
-        if flag == 's':
+        if type(flag) == int:
             self.reader = vtk.vtkNIFTIImageReader()
-            self.reader.SetFileName(AppWindow.filepaths[0])
+            self.reader.SetFileName(AppWindow.filepaths[flag])
             self.reader.Update()
 
         # Start by creating a black/white lookup table.
@@ -576,250 +576,168 @@ class AppWindow(QMainWindow):
         self.irenVol.Initialize()
         self.irenVol.Start()
 
-    def checker_board(self):
+    def checkerboardFeature(self):
+        fixedImageCheckerboard = QLabel('Fixed Image:')
+        movingImageCheckerboard = QLabel('Moving Image:')
 
-        if len(AppWindow.allfiles) == 1:
-            QMessageBox.about(self, "Oops!", "Two images are needed for this feature.")
-        elif self.checkerboardD == 0:
-            QMessageBox.about(self, "Oops!", "Tile size is needed for this feature.")
+        tileSizeCheckerboard = QLabel('Tile Size:')
+        self.tileSizeInput = QLineEdit(self)
+        self.tileSizeInput.setFixedWidth(60)
+
+        checkerboardButton = QPushButton('Apply', self)
+
+        checkerboardInput = QWidget()
+        gridCheckerboard = QGridLayout()
+        gridCheckerboard.addWidget(fixedImageCheckerboard, 1, 0)
+        gridCheckerboard.addWidget(self.fixedImage, 1, 1)
+        gridCheckerboard.addWidget(movingImageCheckerboard, 2, 0)
+        gridCheckerboard.addWidget(self.movingImage, 2, 1)
+        gridCheckerboard.addWidget(tileSizeCheckerboard, 3, 0)
+        gridCheckerboard.addWidget(self.tileSizeInput, 3, 1)
+        gridCheckerboard.addWidget(checkerboardButton, 4, 0)
+
+        checkerboardInput.setLayout(gridCheckerboard)
+        self.dockWidPanel.setWidget(checkerboardInput)
+
+        checkerboardButton.clicked.connect(self.showCheckerboard)
+
+
+    def showCheckerboard(self):
+        fixed = self.fixedImage.currentIndex()
+        moving = self.movingImage.currentIndex()
+
+        if self.tileSizeInput.text() == "":
+            QMessageBox.about(self, "Oops!", "Enter tile size.")
         else:
-            self.mdi.removeSubWindow(self.subSag)
-            self.mdi.removeSubWindow(self.subVol)
-            self.mdi.removeSubWindow(self.subAxl)
-            self.mdi.removeSubWindow(self.subCor)
-            self.ren.EraseOn()
-            self.renVol.EraseOn()
-            self.vtkWidgetVol.update()
+            size = int(self.tileSizeInput.text())
+            if size <= 0:
+                QMessageBox.about(self, "Oops!", "Tile size ( > 0 ) is needed for this feature.")
+            else:
+                self.reloadWindows()
 
-            image1 = vtkImageData()
-            image1.ShallowCopy(AppWindow.allfiles[0])
+                fixedimg = vtkImageData()
+                fixedimg.ShallowCopy(AppWindow.allfiles[fixed])
 
-            image2 = vtkImageData()
-            image2.ShallowCopy(AppWindow.allfiles[1])
+                movingimg = vtkImageData()
+                movingimg.ShallowCopy(AppWindow.allfiles[moving])
 
-            checkerboard = sitk.CheckerBoard(vtk2sitk(image2), vtk2sitk(image1),
-                                             (self.checkerboardD, self.checkerboardD, self.checkerboardD))
+                checkerboard = sitk.CheckerBoard(vtk2sitk(fixedimg), vtk2sitk(movingimg),
+                                             (size, size, size))
 
-            self.vtk(sitk2vtk(checkerboard), "c")
+                self.vtk(sitk2vtk(checkerboard), fixed)
 
-    def checker_board_tile(self):
-        self.checkerboardD = int(self.tileSizeCB.text())
+    def overlapFeature(self):
 
-    def overlap(self):
-        if len(AppWindow.allfiles) == 1:
-            QMessageBox.about(self, "Oops!", "A mask is needed for this feature.")
-        else:
+        baseImage = QLabel('Base:')
+        maskImage = QLabel('Mask:')
+        overlapButton = QPushButton('Apply', self)
 
-            self.mdi.removeSubWindow(self.subSag)
-            self.mdi.removeSubWindow(self.subVol)
-            self.mdi.removeSubWindow(self.subAxl)
-            self.mdi.removeSubWindow(self.subCor)
-            self.ren.EraseOn()
-            self.renVol.EraseOn()
-            self.vtkWidgetVol.update()
+        overlapInput = QWidget()
+        gridOverlap = QGridLayout()
 
-            image1 = vtkImageData()
-            image1.ShallowCopy(AppWindow.allfiles[0])
+        gridOverlap.addWidget(baseImage, 1, 0)
+        gridOverlap.addWidget(self.fixedImage, 1, 1)
+        gridOverlap.addWidget(maskImage, 2, 0)
+        gridOverlap.addWidget(self.maskImage, 2, 1)
+        gridOverlap.addWidget(overlapButton, 3, 0)
 
-            image2 = vtkImageData()
-            image2.ShallowCopy(AppWindow.allfiles[1])
+        overlapInput.setLayout(gridOverlap)
+        self.dockWidPanel.setWidget(overlapInput)
 
-            full = vtk2sitk(image1)
-            mask = vtk2sitk(image2)
+        overlapButton.clicked.connect(self.showOverlap)
 
-            green = [0, 255, 0]
 
-            background = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
+    def showOverlap(self):
+        fixedBase = self.fixedImage.currentIndex()
+        selectedMask = self.maskImage.currentIndex()
+
+        self.reloadWindows()
+
+        baseimg = vtkImageData()
+        baseimg.ShallowCopy(AppWindow.allfiles[fixedBase])
+
+        maskimg = vtkImageData()
+        maskimg.ShallowCopy(AppWindow.allfiles[selectedMask])
+
+        full = vtk2sitk(baseimg)
+        mask = vtk2sitk(maskimg)
+
+        green = [0, 255, 0]
+
+        background = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
                                            labelImage=sitk.Cast(mask, sitk.sitkUInt8),
                                            opacity=0.8, backgroundValue=0)
 
-            mask = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
+        mask = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
                                      labelImage=sitk.Cast(mask, sitk.sitkUInt8),
                                      opacity=0.8, backgroundValue=-1.0, colormap=green)
 
-            # dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
-            # print(dice_score)
+        # dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
+        # print(dice_score)
 
-            image_blender = vtk.vtkImageBlend()
-            image_blender.SetBlendModeToCompound()
-            image_blender.SetCompoundAlpha(True)
-            image_blender.AddInputData(sitk2vtk(background))
-            image_blender.AddInputData(sitk2vtk(mask))
-            image_blender.SetOpacity(0, 0.5)
-            image_blender.SetOpacity(1, 0.5)
-            image_blender.Update()
+        image_blender = vtk.vtkImageBlend()
+        image_blender.SetBlendModeToCompound()
+        image_blender.SetCompoundAlpha(True)
+        image_blender.AddInputData(sitk2vtk(background))
+        image_blender.AddInputData(sitk2vtk(mask))
+        image_blender.SetOpacity(0, 0.5)
+        image_blender.SetOpacity(1, 0.5)
+        image_blender.Update()
 
-            self.vtk(image_blender.GetOutput(), "s")
+        self.vtk(image_blender.GetOutput(), fixedBase)
+
+    def plugin_handler(self):
+        item = str(self.pluginsListWidget.selectedItems()[0].text())
+        if item == 'Checkerboard':
+            self.checkerboardFeature()
+        elif item == 'Label Overlap':
+            self.overlapFeature()
 
     def docker_widget(self):
-        dockWid = QDockWidget('Tool', self)
+
+        # first panel
+        dockWid = QDockWidget('Features', self)
         dockWid.setFixedWidth(300)
-        layout = QGridLayout()
-        styleSheet = """
-                        QToolBox::tab {
-                            border: 1px solid #C4C4C4;
-                            border-bottom-color: RGB(0, 0, 225);
-                        }
-                        QToolBox::tab:selected {
-                            background-color: #4E14C2;
-                            color: white;
-                            border-bottom-color: none;
-                        }
-        """
+        dockWid.setFixedHeight(245)
+        dockWid.setFeatures(QDockWidget.NoDockWidgetFeatures)
 
-        toolbox = QToolBox()
-        layout.addWidget(toolbox, 0, 0)
+        self.pluginsListWidget = QListWidget()
+        self.pluginsListWidget.addItem('Checkerboard')
+        self.pluginsListWidget.addItem('Label Overlap')
+        self.pluginsListWidget.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.pluginsListWidget.itemClicked.connect(self.plugin_handler)
 
-        # TAB TRANSFORMATION
-        w1 = QWidget()
-        scale = QLabel('Scale')
-        sx_coord = QLabel('X')
-        sy_coord = QLabel('Y')
-        sz_coord = QLabel('Z')
-        rotate = QLabel('Rotate')
-        rx_coord = QLabel('X')
-        ry_coord = QLabel('Y')
-        rz_coord = QLabel('Z')
-        translate = QLabel('Translate')
-        tx_coord = QLabel('X')
-        ty_coord = QLabel('Y')
-        tz_coord = QLabel('Z')
+        #seg_btn = QPushButton('Label Overlap', self)
+        #seg_btn.setFlat(True)
+        #seg_btn.clicked.connect(self.overlap)
 
-        self.scaleX = QLineEdit(self)
-        self.scaleY = QLineEdit(self)
-        self.scaleZ = QLineEdit(self)
-        scalee = QPushButton('Apply', self)
-        scalee.clicked.connect(self.scaleXYZ)
-        self.scaleX.setFixedWidth(30)
-        self.scaleY.setFixedWidth(30)
-        self.scaleZ.setFixedWidth(30)
-        self.rotateX = QLineEdit(self)
-        self.rotateY = QLineEdit(self)
-        self.rotateZ = QLineEdit(self)
-        rotatee = QPushButton('Apply', self)
-        rotatee.clicked.connect(self.rotateXYZ)
-        self.rotateX.setFixedWidth(30)
-        self.rotateY.setFixedWidth(30)
-        self.rotateZ.setFixedWidth(30)
-        self.translateX = QLineEdit()
-        self.translateY = QLineEdit()
-        self.translateZ = QLineEdit()
-        self.translateX.setFixedWidth(30)
-        self.translateY.setFixedWidth(30)
-        self.translateZ.setFixedWidth(30)
-        translatee = QPushButton('Apply', self)
-        translatee.clicked.connect(self.translateXYZ)
-
-        grid = QGridLayout()
-        grid.setSpacing(5)
-
-        grid.addWidget(scale, 1, 0)
-        grid.addWidget(sx_coord, 1, 1)
-        grid.addWidget(self.scaleX, 1, 2)
-        grid.addWidget(sy_coord, 1, 3)
-        grid.addWidget(self.scaleY, 1, 4)
-        grid.addWidget(sz_coord, 1, 5)
-        grid.addWidget(self.scaleZ, 1, 6)
-        grid.addWidget(scalee, 1, 7)
-
-        grid.addWidget(rotate, 2, 0)
-        grid.addWidget(rx_coord, 2, 1)
-        grid.addWidget(self.rotateX, 2, 2)
-        grid.addWidget(ry_coord, 2, 3)
-        grid.addWidget(self.rotateY, 2, 4)
-        grid.addWidget(rz_coord, 2, 5)
-        grid.addWidget(self.rotateZ, 2, 6)
-        grid.addWidget(rotatee, 2, 7)
-
-        grid.addWidget(translate, 3, 0)
-        grid.addWidget(tx_coord, 3, 1)
-        grid.addWidget(self.translateX, 3, 2)
-        grid.addWidget(ty_coord, 3, 3)
-        grid.addWidget(self.translateY, 3, 4)
-        grid.addWidget(tz_coord, 3, 5)
-        grid.addWidget(self.translateZ, 3, 6)
-        grid.addWidget(translatee, 3, 7)
-        w1.setLayout(grid)
-
-        toolbox.addItem(w1, 'Transformation')
-
-        # TAB MAGNIFIER
-        w2 = QWidget()
-        grid = QGridLayout()
-        grid.setSpacing(10)
-
-        z_in = QPushButton('Zoom In', self)
-        z_in.setIcon(QtGui.QIcon('icons/zoom-in_icon.png'))
-        z_in.clicked.connect(self.zoom_in)
-        z_out = QPushButton('Zoom Out', self)
-        z_out.setIcon(QtGui.QIcon('icons/zoom-out_icon.png'))
-        z_in.clicked.connect(self.zoom_out)
-
-        grid.addWidget(z_in, 0, 0)
-        grid.addWidget(z_out, 0, 1)
-
-        w2.setLayout(grid)
-        toolbox.addItem(w2, 'Magnifier')
-
-        # TAB WIDGET
-        w3 = QWidget()
-        grid_w = QGridLayout()
-        grid_w.setSpacing(10)
-
-        axis = QPushButton('3D Axis', self)
-        axis.setIcon(QtGui.QIcon('icons/axis_icon.png'))
-        axis.clicked.connect(self.thrDaxis)
-        box = QPushButton('3D Box', self)
-        box.setIcon(QtGui.QIcon('icons/cube_icon.png'))
-        box.clicked.connect(self.thrBox)
-
-        grid_w.addWidget(axis, 0, 0)
-        grid_w.addWidget(box, 0, 1)
-
-        w3.setLayout(grid_w)
-        toolbox.addItem(w3, 'Widget')
-
-        # TAB PLUGINS
-        w4 = QWidget()
-        self.grid_p = QGridLayout()
-        # self.grid_d.setSpacing(5)
-
-        # filename = 'Unknown'
-        # self.add_dataset(filename)
-
-        cb_btn = QPushButton('Checkerboard', self)
-        tileSize = QLabel('Tile Size:')
-        self.tileSizeCB = QLineEdit(self)
-        self.tileSizeCB.setFixedWidth(60)
-        cbTileSize = QPushButton('Apply', self)
-        cbTileSize.clicked.connect(self.checker_board_tile)
-        cb_btn.clicked.connect(self.checker_board)
-        cb_btn.setFlat(True)
-        seg_btn = QPushButton('Label Overlap', self)
-        seg_btn.setFlat(True)
-        seg_btn.clicked.connect(self.overlap)
-        restart_button = QPushButton("Restart")
-        # restart_button.clicked.connect(self.restart)
-
-        self.grid_p.addWidget(cb_btn)
-        self.grid_p.addWidget(tileSize, 1, 0)
-        self.grid_p.addWidget(self.tileSizeCB, 1, 1)
-        self.grid_p.addWidget(cbTileSize, 1, 2)
-        self.grid_p.addWidget(seg_btn)
-        # self.grid_p.addWidget(restart_button)
-
-        w4.setLayout(self.grid_p)
-        toolbox.addItem(w4, 'Plugins')
-
-        #############################
-        toolbox.setCurrentIndex(0)
-        self.setStyleSheet(styleSheet)
-        self.setLayout(layout)
-
-        #
-        dockWid.setWidget(toolbox)
+        dockWid.setWidget(self.pluginsListWidget)
         dockWid.setFloating(False)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dockWid)
+
+        # second panel
+        dockWidEval = QDockWidget('Metrics', self)
+        dockWidEval.setFixedWidth(300)
+        dockWidEval.setFixedHeight(245)
+        dockWidEval.setFeatures(QDockWidget.NoDockWidgetFeatures)
+
+        self.evalMetricsListWidget = QListWidget()
+        self.evalMetricsListWidget.addItem('Dice')
+        self.evalMetricsListWidget.addItem('Average Distance')
+        self.evalMetricsListWidget.addItem('Hausdorff')
+
+        dockWidEval.setWidget(self.evalMetricsListWidget)
+        dockWidEval.setFloating(False)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dockWidEval)
+
+        # third panel
+        self.dockWidPanel = QDockWidget('Feature Panel', self)
+        self.dockWidPanel.setFixedWidth(300)
+        self.dockWidPanel.setFixedHeight(245)
+        self.dockWidPanel.setFeatures(QDockWidget.NoDockWidgetFeatures)
+
+        self.dockWidPanel.setFloating(False)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.dockWidPanel)
 
     def docker_widgetR(self):
 
@@ -836,87 +754,15 @@ class AppWindow(QMainWindow):
     def add_dataset(self, filename):
 
         name = filename.split("/")[-1]
-        self.fileButton = QPushButton(name, self)
-        self.fileButton.clicked.connect(self.showStateFileButton)
-        self.fileButton.setFlat(True)
-
         self.filesListWidget.addItem(name)
+        self.fixedImage.addItem(name)
+        self.movingImage.addItem(name)
+        self.maskImage.addItem(name)
 
         AppWindow.count = AppWindow.count + 1
 
-    def zoom_in(self):
-        self.ren.GetActiveCamera().Zoom(2.2)
-
-    def zoom_out(self):
-        self.ren.GetActiveCamera().Zoom(0.8)
-
-    def thrDaxis(self):
-        axesActor = vtk.vtkAxesActor()
-        self.axes = vtk.vtkOrientationMarkerWidget()
-        self.axes.SetOrientationMarker(axesActor)
-        self.axes.SetInteractor(self.iren)
-        self.axes.EnabledOn()
-        self.axes.InteractiveOn()
-        self.ren.ResetCamera()
-        # self.frame.setLayout(self.vl)
-        # self.setCentralWidget(self.frame)
-        # self.show()
-        # self.iren.Initialize()
-
-    def thrBox(self):
-        outline = vtk.vtkOutlineFilter()
-        outline.SetInputConnection(self.reader.GetOutputPort())
-
-        outlineMapper = vtk.vtkPolyDataMapper()
-        outlineMapper.SetInputConnection(outline.GetOutputPort())
-
-        self.outlineActor = vtk.vtkActor()
-        self.outlineActor.SetMapper(outlineMapper)
-        self.outlineActor.GetProperty().SetColor(1, 1, 1)
-        self.renVol.AddActor(self.outlineActor)
-        self.renVol.ResetCamera()
-
-    def scaleXYZ(self):
-        x = int(self.scaleX.text())
-        y = int(self.scaleY.text())
-        z = int(self.scaleZ.text())
-        self.ren.Render()
-        self.ren.EraseOff()
-        self.outlineActor.SetScale(x, y, z)
-        self.volume.SetScale(x, y, z)
-        self.ren.Render()
-        self.ren.EraseOn()
-
-    def rotateXYZ(self):
-        x = int(self.rotateX.text())
-        y = int(self.rotateY.text())
-        z = int(self.rotateZ.text())
-        self.outlineActor.SetOrientation(x, y, z)
-        self.volume.SetOrientation(x, y, z)
-        self.ren.Render()
-        self.ren.EraseOff()
-
-        self.volume.RotateX(x)
-        self.volume.RotateY(y)
-        self.volume.RotateZ(z)
-        self.outlineActor.RotateX(x)
-        self.outlineActor.RotateY(y)
-        self.outlineActor.RotateZ(z)
-
-        self.ren.Render()
-        self.ren.EraseOn()
-
-    def translateXYZ(self):
-        x = int(self.translateX.text())
-        y = int(self.translateY.text())
-        z = int(self.translateZ.text())
-        # self.volume.SetOrientation(0, 0, 0)
-        self.ren.Render()
-        self.ren.EraseOff()
-        self.outlineActor.SetPosition(x, y, z)
-        self.volume.SetPosition(x, y, z)
-        self.ren.Render()
-        self.ren.EraseOn()
+    def updatePanel(self, p):
+        print(True)
 
 
 # Press the green button in the gutter to run the script.
