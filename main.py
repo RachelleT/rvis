@@ -32,10 +32,18 @@ class AppWindow(QMainWindow):
         self.setWindowIcon(QtGui.QIcon('icons/schwi_icon.png'))
         self.setWindowTitle("RVis")
 
-        self.setAcceptDrops(True)
+        self.setAcceptDrops(True) # for drag and drop
+
+        # for feature panel
         self.fixedImage = QComboBox()
         self.movingImage = QComboBox()
         self.maskImage = QComboBox()
+
+        # for fixing planes
+
+        self.axlFlag = False
+        self.corFlag = False
+        self.sagFlag = False
 
         self.mdi = QMdiArea()
         self.setCentralWidget(self.mdi)
@@ -60,12 +68,6 @@ class AppWindow(QMainWindow):
         view_mode = self.create_action('Light Mode', 'icons/cube_icon.png', 'F2', self.docker_widget)
         view_tiled = self.create_action('Tiled Mode', 'icons/tile_icon.png', 'Ctrl+T', self.show_tiled)
         self.add_action(view, (view_mode, view_tiled))
-
-        panels = view.addMenu('Customize panels')
-        axl = self.create_action('Fix Axial View', 'icons/square_icon.png', 'F3', self.updatePanel(1))
-        cor = self.create_action("Fix Coronal View", 'icons/square_icon.png', 'F4', self.updatePanel(2))
-        sag = self.create_action("Fix Sagittal View", 'icons/square_icon.png', 'F5', self.updatePanel(3))
-        self.add_action(panels, (axl, cor, sag))
 
     def tool_bar(self):
         navToolBar = self.addToolBar("Navigation")
@@ -291,7 +293,17 @@ class AppWindow(QMainWindow):
 
         # calculate index of middle slice in the dicom image
         maxSlice = self.viewer.GetSliceMax()
+        minSlice = self.viewer.GetSliceMin()
         midSlice = maxSlice / 2
+
+        # add scroll bar
+        self.axlScrollBar = QScrollBar(self.subAxl)
+        self.axlScrollBar.setEnabled(True)
+        self.axlScrollBar.setOrientation(QtCore.Qt.Horizontal)
+        self.axlScrollBar.setGeometry(628, 30, 10, 367)
+        self.axlScrollBar.setMinimum(minSlice)
+        self.axlScrollBar.setMaximum(maxSlice)
+        self.axlScrollBar.setSliderPosition(int(midSlice))
 
         # set up reslice view properties
         self.viewer.SetSlice(int(midSlice))
@@ -760,10 +772,6 @@ class AppWindow(QMainWindow):
         self.maskImage.addItem(name)
 
         AppWindow.count = AppWindow.count + 1
-
-    def updatePanel(self, p):
-        print(True)
-
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
