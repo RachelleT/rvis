@@ -197,14 +197,21 @@ class AppWindow(QMainWindow):
             self.add_dataset(self.filename)
             self.vtk(self.reader.GetOutput(), "d")
 
+
     def file_open_img(self):
         self.filename = QtWidgets.QFileDialog.getOpenFileName(self, "Select File", "Images (*.jpeg *.jpg "
                                                                                    "*nii *gz)")
 
         if self.filename[0] != "":
+            AppWindow.filepaths.append(self.filename[0])
             file = self.readImage(self.filename[0])  # self.filename is a tuple
+            AppWindow.allfiles.append(file)
             self.add_dataset(self.filename[0])
-            self.vtk(file, "f")
+            if AppWindow.count == 1:
+                self.vtk(file, "f")
+            else:
+                self.reloadWindows()
+                self.vtk(file, "f")
 
     def file_save_img(self):
         # selecting file path
