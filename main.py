@@ -100,20 +100,14 @@ class AppWindow(QMainWindow):
         if event.mimeData().hasImage:
             event.setDropAction(QtCore.Qt.CopyAction)
             file_path = event.mimeData().urls()[0].toLocalFile()
-            AppWindow.filepaths.append(file_path) # review this with the overlap function
+            AppWindow.filepaths.append(file_path)
             file = self.readImage(file_path)
             AppWindow.allfiles.append(file)
             self.add_dataset(file_path)
             if AppWindow.count == 1:
                 self.vtk(file, "f")
-            if AppWindow.count == 2:
-                self.mdi.removeSubWindow(self.subSag)
-                self.mdi.removeSubWindow(self.subVol)
-                self.mdi.removeSubWindow(self.subAxl)
-                self.mdi.removeSubWindow(self.subCor)
-                self.ren.EraseOn()
-                self.renVol.EraseOn()
-                self.vtkWidgetVol.update()
+            else:
+                self.reloadWindows()
                 self.vtk(file, "f")
             event.accept()
         else:
@@ -246,9 +240,9 @@ class AppWindow(QMainWindow):
 
     def vtk(self, filename, flag):
 
-        if flag == 's':
+        if type(flag) == int:
             self.reader = vtk.vtkNIFTIImageReader()
-            self.reader.SetFileName(AppWindow.filepaths[0])
+            self.reader.SetFileName(AppWindow.filepaths[flag])
             self.reader.Update()
 
         # Start by creating a black/white lookup table.
@@ -602,23 +596,25 @@ class AppWindow(QMainWindow):
         fixed = self.fixedImage.currentIndex()
         moving = self.movingImage.currentIndex()
 
-        size = int(self.tileSizeInput.text())
-
-        if size <= 0:
-            QMessageBox.about(self, "Oops!", "Tile size ( > 0 ) is needed for this feature.")
+        if self.tileSizeInput.text() == "":
+            QMessageBox.about(self, "Oops!", "Enter tile size.")
         else:
-            self.reloadWindows()
+            size = int(self.tileSizeInput.text())
+            if size <= 0:
+                QMessageBox.about(self, "Oops!", "Tile size ( > 0 ) is needed for this feature.")
+            else:
+                self.reloadWindows()
 
-            fixedimg = vtkImageData()
-            fixedimg.ShallowCopy(AppWindow.allfiles[fixed])
+                fixedimg = vtkImageData()
+                fixedimg.ShallowCopy(AppWindow.allfiles[fixed])
 
-            movingimg = vtkImageData()
-            movingimg.ShallowCopy(AppWindow.allfiles[moving])
+                movingimg = vtkImageData()
+                movingimg.ShallowCopy(AppWindow.allfiles[moving])
 
-            checkerboard = sitk.CheckerBoard(vtk2sitk(fixedimg), vtk2sitk(movingimg),
+                checkerboard = sitk.CheckerBoard(vtk2sitk(fixedimg), vtk2sitk(movingimg),
                                              (size, size, size))
 
-            self.vtk(sitk2vtk(checkerboard), "c")
+                self.vtk(sitk2vtk(checkerboard), fixed)
 
     def overlapFeature(self):
 
@@ -678,7 +674,7 @@ class AppWindow(QMainWindow):
         image_blender.SetOpacity(1, 0.5)
         image_blender.Update()
 
-        self.vtk(image_blender.GetOutput(), "s")
+        self.vtk(image_blender.GetOutput(), fixedBase)
 
     def plugin_handler(self):
         item = str(self.pluginsListWidget.selectedItems()[0].text())
