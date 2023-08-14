@@ -1,0 +1,149 @@
+import numpy as np
+import scipy.ndimage
+from scipy.ndimage import map_coordinates
+
+#from utils import metrics
+
+class AverageMeter(object):
+    """
+    Computes and stores the average and current value.
+    Taken from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
+    Useful for monitoring current value and running average over iterations.
+    """
+    def __init__(self):
+        self.reset()
+        self.values = np.array([])
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+        self.std = 0
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+        self.values = np.array([])
+        self.std = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+        self.values = np.append(self.values,val)
+        self.std = np.std(self.values)
+
+
+def compute_tre(fix_lms, mov_lms, spacing_fix, spacing_mov, disp=None, fix_lms_warped=None):
+    
+    if disp is not None:
+        fix_lms_disp_x = map_coordinates(disp[:, :, :, 0], fix_lms.transpose())
+        fix_lms_disp_y = map_coordinates(disp[:, :, :, 1], fix_lms.transpose())
+        fix_lms_disp_z = map_coordinates(disp[:, :, :, 2], fix_lms.transpose())
+        fix_lms_disp = np.array((fix_lms_disp_x, fix_lms_disp_y, fix_lms_disp_z)).transpose()
+
+        fix_lms_warped = fix_lms + fix_lms_disp
+        
+    return np.linalg.norm((fix_lms_warped - mov_lms) * spacing_mov, axis=1)
+
+
+def compute_landmark_accuracy(landmarks_pred, landmarks_gt, voxel_size):
+    landmarks_pred = np.round(landmarks_pred)
+    landmarks_gt = np.round(landmarks_gt)
+
+    difference = landmarks_pred - landmarks_gt
+    difference = np.abs(difference)
+    difference = difference * voxel_size
+
+    means = np.mean(difference, 0)
+    stds = np.std(difference, 0)
+
+    difference = np.square(difference)
+    difference = np.sum(difference, 1)
+    difference = np.sqrt(difference)
+
+    means = np.append(means, np.mean(difference))
+    stds = np.append(stds, np.std(difference))
+
+    means = np.round(means, 2)
+    stds = np.round(stds, 2)
+
+    means = means[::-1]
+    stds = stds[::-1]
+
+    return means, stds
+
+
+def compute_dice_coefficient(mask_gt, mask_pred):
+    """Computes soerensen-dice coefficient.
+
+    compute the soerensen-dice coefficient between the ground truth mask `mask_gt`
+    and the predicted mask `mask_pred`.
+
+    Args:
+        mask_gt: 3-dim Numpy array of type bool. The ground truth mask.
+        mask_pred: 3-dim Numpy array of type bool. The predicted mask.
+
+    Returns:
+        the dice coeffcient as float. If both masks are empty, the result is NaN.
+    """
+    volume_sum = mask_gt.sum() + mask_pred.sum()
+    if volume_sum == 0:
+        return np.NaN
+    volume_intersect = (mask_gt & mask_pred).sum()
+    return 2*volume_intersect / volume_sum
+
+def compute_dice(fixed,moving,moving_warped,labels):
+    dice = []
+    for i in labels:
+        if ((fixed==i).sum()==0) or ((moving==i).sum()==0):
+            dice.append(np.NAN)
+        else:
+            print("metrics")
+            #dice.append(metrics.compute_dice_coefficient((fixed==i), (moving_warped==i)))
+    mean_dice = np.nanmean(dice)
+    return mean_dice, dice
+
+
+def compute_hd95(fixed,moving,moving_warped,labels):
+    hd95 = []
+    for i in labels:
+        if ((fixed==i).sum()==0) or ((moving==i).sum()==0):
+            hd95.append(np.NAN)
+        else:
+            print("metrics")
+            #hd95.append(metrics.compute_robust_hausdorff(metrics.compute_surface_distances((fixed==i), (moving_warped==i), np.ones(3)), 95.))
+    mean_hd95 =  np.nanmean(hd95)
+    return mean_hd95,hd95
+
+
+def jacobian_determinant(disp):
+    _, _, H, W, D = disp.shape
+    
+    gradx  = np.array([-0.5, 0, 0.5]).reshape(1, 3, 1, 1)
+    grady  = np.array([-0.5, 0, 0.5]).reshape(1, 1, 3, 1)
+    gradz  = np.array([-0.5, 0, 0.5]).reshape(1, 1, 1, 3)
+
+    gradx_disp = np.stack([scipy.ndimage.correlate(disp[:, 0, :, :, :], gradx, mode='constant', cval=0.0),
+                           scipy.ndimage.correlate(disp[:, 1, :, :, :], gradx, mode='constant', cval=0.0),
+                           scipy.ndimage.correlate(disp[:, 2, :, :, :], gradx, mode='constant', cval=0.0)], axis=1)
+    
+    grady_disp = np.stack([scipy.ndimage.correlate(disp[:, 0, :, :, :], grady, mode='constant', cval=0.0),
+                           scipy.ndimage.correlate(disp[:, 1, :, :, :], grady, mode='constant', cval=0.0),
+                           scipy.ndimage.correlate(disp[:, 2, :, :, :], grady, mode='constant', cval=0.0)], axis=1)
+    
+    gradz_disp = np.stack([scipy.ndimage.correlate(disp[:, 0, :, :, :], gradz, mode='constant', cval=0.0),
+                           scipy.ndimage.correlate(disp[:, 1, :, :, :], gradz, mode='constant', cval=0.0),
+                           scipy.ndimage.correlate(disp[:, 2, :, :, :], gradz, mode='constant', cval=0.0)], axis=1)
+
+    grad_disp = np.concatenate([gradx_disp, grady_disp, gradz_disp], 0)
+
+    jacobian = grad_disp + np.eye(3, 3).reshape(3, 3, 1, 1, 1)
+    jacobian = jacobian[:, :, 2:-2, 2:-2, 2:-2]
+    jacdet = jacobian[0, 0, :, :, :] * (jacobian[1, 1, :, :, :] * jacobian[2, 2, :, :, :] - jacobian[1, 2, :, :, :] * jacobian[2, 1, :, :, :]) -\
+             jacobian[1, 0, :, :, :] * (jacobian[0, 1, :, :, :] * jacobian[2, 2, :, :, :] - jacobian[0, 2, :, :, :] * jacobian[2, 1, :, :, :]) +\
+             jacobian[2, 0, :, :, :] * (jacobian[0, 1, :, :, :] * jacobian[1, 2, :, :, :] - jacobian[0, 2, :, :, :] * jacobian[1, 1, :, :, :])
+        
+    return jacdet
