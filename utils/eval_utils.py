@@ -1,8 +1,7 @@
 import numpy as np
 import scipy.ndimage
 from scipy.ndimage import map_coordinates
-
-#from utils import metrics
+from utils import metrics
 
 class AverageMeter(object):
     """
@@ -75,26 +74,6 @@ def compute_landmark_accuracy(landmarks_pred, landmarks_gt, voxel_size):
 
     return means, stds
 
-
-def compute_dice_coefficient(mask_gt, mask_pred):
-    """Computes soerensen-dice coefficient.
-
-    compute the soerensen-dice coefficient between the ground truth mask `mask_gt`
-    and the predicted mask `mask_pred`.
-
-    Args:
-        mask_gt: 3-dim Numpy array of type bool. The ground truth mask.
-        mask_pred: 3-dim Numpy array of type bool. The predicted mask.
-
-    Returns:
-        the dice coeffcient as float. If both masks are empty, the result is NaN.
-    """
-    volume_sum = mask_gt.sum() + mask_pred.sum()
-    if volume_sum == 0:
-        return np.NaN
-    volume_intersect = (mask_gt & mask_pred).sum()
-    return 2*volume_intersect / volume_sum
-
 def compute_dice(fixed,moving,moving_warped,labels):
     dice = []
     for i in labels:
@@ -102,7 +81,7 @@ def compute_dice(fixed,moving,moving_warped,labels):
             dice.append(np.NAN)
         else:
             print("metrics")
-            #dice.append(metrics.compute_dice_coefficient((fixed==i), (moving_warped==i)))
+            dice.append(metrics.compute_dice_coefficient((fixed==i), (moving_warped==i)))
     mean_dice = np.nanmean(dice)
     return mean_dice, dice
 
@@ -114,7 +93,7 @@ def compute_hd95(fixed,moving,moving_warped,labels):
             hd95.append(np.NAN)
         else:
             print("metrics")
-            #hd95.append(metrics.compute_robust_hausdorff(metrics.compute_surface_distances((fixed==i), (moving_warped==i), np.ones(3)), 95.))
+            hd95.append(metrics.compute_robust_hausdorff(metrics.compute_surface_distances((fixed==i), (moving_warped==i), np.ones(3)), 95.))
     mean_hd95 =  np.nanmean(hd95)
     return mean_hd95,hd95
 

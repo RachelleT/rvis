@@ -1,6 +1,7 @@
 # This is a sample Python script.
 import os
 import sys
+import numpy as np
 import SimpleITK as sitk
 from SimpleITK.utilities import sitk2vtk, vtk2sitk
 import vtk
@@ -9,6 +10,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMdiArea, QMdiSubWindow, 
     QFrame, QScrollBar, QMessageBox, QListWidget, QAbstractItemView, QComboBox
 from PyQt5 import QtCore, QtGui, QtWidgets
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+from vtkmodules.util.numpy_support import vtk_to_numpy, numpy_to_vtk
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkCommonCore import vtkLookupTable
 from vtkmodules.vtkCommonDataModel import vtkImageData
@@ -703,12 +705,54 @@ class AppWindow(QMainWindow):
         #self.vtk(image_blender.GetOutput(), fixedBase)
         self.saveFeature(image_blender.GetOutput(), fixedBase)
 
+    def differenceFeature(self):
+        fixedDifferenceImage = QLabel('Fixed Image:')
+        movingDifferenceImage = QLabel('Moving Image:')
+
+        differenceImageButton = QPushButton('Apply', self)
+
+        differenceImageInput = QWidget()
+        gridDifferenceImage = QGridLayout()
+
+        gridDifferenceImage.addWidget(fixedDifferenceImage, 1, 0)
+        gridDifferenceImage.addWidget(self.fixedImage, 1, 1)
+        gridDifferenceImage.addWidget(movingDifferenceImage, 2, 0)
+        gridDifferenceImage.addWidget(self.movingImage, 2, 1)
+        gridDifferenceImage.addWidget(differenceImageButton, 3, 0)
+
+        differenceImageInput.setLayout(gridDifferenceImage)
+        self.dockWidPanel.setWidget(differenceImageInput)
+
+        differenceImageButton.clicked.connect(self.showDifferenceImage)
+
+    def showDifferenceImage(self):
+        fixedDI = self.fixedImage.currentIndex()
+        movingDI = self.maskImage.currentIndex()
+
+        self.reloadWindows()
+
+        fixedImgDI = vtkImageData()
+        fixedImgDI.ShallowCopy(AppWindow.allfiles[fixedDI])
+
+        movingImgDI = vtkImageData()
+        movingImgDI.ShallowCopy(AppWindow.allfiles[movingDI])
+
+        imageMath = vtk.vtkImageMathematics()
+        imageMath.SetOperationToSubtract()
+        imageMath.SetInput1Data(fixedImgDI)
+        imageMath.SetInput2Data(movingImgDI)
+        imageMath.Update()
+
+        self.saveFeature(imageMath.GetOutput(), fixedDI)
+
     def plugin_handler(self):
         item = str(self.pluginsListWidget.selectedItems()[0].text())
         if item == 'Checkerboard':
             self.checkerboardFeature()
         elif item == 'Label Overlap':
             self.overlapFeature()
+        elif item == 'Difference Image':
+            self.differenceFeature()
 
     def docker_widget(self):
 
@@ -721,12 +765,9 @@ class AppWindow(QMainWindow):
         self.pluginsListWidget = QListWidget()
         self.pluginsListWidget.addItem('Checkerboard')
         self.pluginsListWidget.addItem('Label Overlap')
+        self.pluginsListWidget.addItem('Difference Image')
         self.pluginsListWidget.setSelectionMode(QAbstractItemView.SingleSelection)
         self.pluginsListWidget.itemClicked.connect(self.plugin_handler)
-
-        #seg_btn = QPushButton('Label Overlap', self)
-        #seg_btn.setFlat(True)
-        #seg_btn.clicked.connect(self.overlap)
 
         dockWid.setWidget(self.pluginsListWidget)
         dockWid.setFloating(False)
