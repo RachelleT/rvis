@@ -150,9 +150,6 @@ class AppWindow(QMainWindow):
         self.reader.Update()
         return self.reader.GetOutput()
 
-    def showStateFileButton(self):  # file button
-        print("to do")
-
     def sliderEvent(self):
         self.sliderPosition = self.vScrollBar.sliderPosition()
         zmax = self.sliderPosition * 2
@@ -241,7 +238,9 @@ class AppWindow(QMainWindow):
             else:
                 print("to be updated")
 
-            writer.SetInputConnection(self.reader.GetOutputPort()) # self.reader to be updated
+            fileRow = self.filesListWidget.currentRow()
+
+            writer.SetInputData(AppWindow.allfiles[fileRow]) # self.reader to be updated
             writer.SetFileName(filePath)
             # this information will override the reader's header
             writer.SetQFac(self.reader.GetQFac())
@@ -293,17 +292,7 @@ class AppWindow(QMainWindow):
 
         # calculate index of middle slice in the dicom image
         maxSlice = self.viewer.GetSliceMax()
-        minSlice = self.viewer.GetSliceMin()
         midSlice = maxSlice / 2
-
-        # add scroll bar
-        self.axlScrollBar = QScrollBar(self.subAxl)
-        self.axlScrollBar.setEnabled(True)
-        self.axlScrollBar.setOrientation(QtCore.Qt.Horizontal)
-        self.axlScrollBar.setGeometry(628, 30, 10, 367)
-        self.axlScrollBar.setMinimum(minSlice)
-        self.axlScrollBar.setMaximum(maxSlice)
-        self.axlScrollBar.setSliderPosition(int(midSlice))
 
         # set up reslice view properties
         self.viewer.SetSlice(int(midSlice))
@@ -636,7 +625,22 @@ class AppWindow(QMainWindow):
                 checkerboard = sitk.CheckerBoard(vtk2sitk(fixedimg), vtk2sitk(movingimg),
                                              (size, size, size))
 
-                self.vtk(sitk2vtk(checkerboard), fixed)
+                #self.vtk(sitk2vtk(checkerboard), fixed)
+                self.saveFeature(sitk2vtk(checkerboard), fixed)
+
+    def saveFeature(self, file, volumeImage):
+        self.vIndex = volumeImage
+        AppWindow.allfiles.append(file)
+
+        AppWindow.filepaths.append('feature ' + str(AppWindow.count))
+        self.filesListWidget.addItem('feature ' + str(AppWindow.count))
+        self.fixedImage.addItem('feature ' + str(AppWindow.count))
+        self.movingImage.addItem('feature ' + str(AppWindow.count))
+        self.maskImage.addItem('feature ' + str(AppWindow.count))
+
+        self.vtk(file, self.vIndex)
+
+        AppWindow.count = AppWindow.count + 1
 
     def overlapFeature(self):
 
@@ -696,7 +700,8 @@ class AppWindow(QMainWindow):
         image_blender.SetOpacity(1, 0.5)
         image_blender.Update()
 
-        self.vtk(image_blender.GetOutput(), fixedBase)
+        #self.vtk(image_blender.GetOutput(), fixedBase)
+        self.saveFeature(image_blender.GetOutput(), fixedBase)
 
     def plugin_handler(self):
         item = str(self.pluginsListWidget.selectedItems()[0].text())
@@ -758,10 +763,22 @@ class AppWindow(QMainWindow):
         filesDock.setFeatures(QDockWidget.NoDockWidgetFeatures)
 
         self.filesListWidget = QListWidget()
+        self.filesListWidget.itemClicked.connect(self.listWidgetClicked)
 
         filesDock.setWidget(self.filesListWidget)
         filesDock.setFloating(False)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, filesDock)
+
+    def listWidgetClicked(self, item):
+        selectedRow = self.filesListWidget.currentRow()
+        itemName = item.text()
+
+        if 'feature' in itemName:
+            self.reloadWindows()
+            self.vtk(AppWindow.allfiles[selectedRow], self.vIndex)
+        else:
+            self.reloadWindows()
+            self.vtk(AppWindow.allfiles[selectedRow], selectedRow)
 
     def add_dataset(self, filename):
 
