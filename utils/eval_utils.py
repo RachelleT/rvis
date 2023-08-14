@@ -74,25 +74,23 @@ def compute_landmark_accuracy(landmarks_pred, landmarks_gt, voxel_size):
 
     return means, stds
 
-def compute_dice(fixed,moving,moving_warped,labels):
+def compute_dice(fixed, moving_warped,labels):
     dice = []
     for i in labels:
-        if ((fixed==i).sum()==0) or ((moving==i).sum()==0):
+        if ((fixed==i).sum()==0) or ((moving_warped==i).sum()==0):
             dice.append(np.NAN)
         else:
-            print("metrics")
             dice.append(metrics.compute_dice_coefficient((fixed==i), (moving_warped==i)))
     mean_dice = np.nanmean(dice)
     return mean_dice, dice
 
 
-def compute_hd95(fixed,moving,moving_warped,labels):
+def compute_hd95(fixed,moving_warped,labels):
     hd95 = []
     for i in labels:
-        if ((fixed==i).sum()==0) or ((moving==i).sum()==0):
+        if ((fixed==i).sum()==0) or ((moving_warped==i).sum()==0):
             hd95.append(np.NAN)
         else:
-            print("metrics")
             hd95.append(metrics.compute_robust_hausdorff(metrics.compute_surface_distances((fixed==i), (moving_warped==i), np.ones(3)), 95.))
     mean_hd95 =  np.nanmean(hd95)
     return mean_hd95,hd95
