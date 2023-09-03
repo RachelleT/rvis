@@ -17,6 +17,8 @@ from vtkmodules.vtkIOImage import vtkJPEGWriter, vtkTIFFWriter, vtkPNGWriter, vt
 from vtkmodules.vtkImagingCore import vtkImageMapToColors
 from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera
 
+from utils.eval_utils import compute_dice, compute_hd95, binary_image, overlayMask
+
 
 # Press ⌃R to execute it or replace it with your code.
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
@@ -37,7 +39,8 @@ class AppWindow(QMainWindow):
         # for feature panel
         self.fixedImage = QComboBox()
         self.movingImage = QComboBox()
-        self.maskImage = QComboBox()
+        self.masks = QComboBox()
+        self.binaryFlag = False
 
         # for fixing planes
 
@@ -108,6 +111,8 @@ class AppWindow(QMainWindow):
             AppWindow.filepaths.append(file_path)
             file = self.readImage(file_path)
             AppWindow.allfiles.append(file)
+            if self.binaryImageCheck(file):
+                self.binaryFlag = True
             self.add_dataset(file_path)
             if AppWindow.count == 1:
                 self.vtk(file, "f")
@@ -117,6 +122,12 @@ class AppWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
+    def binaryImageCheck(self, imageFile):
+        inputImg = vtkImageData()
+        inputImg.ShallowCopy(imageFile)
+        npImage = sitk.GetArrayFromImage(vtk2sitk(inputImg))
+        return binary_image(npImage)
 
     def readImage(self, filename):
 
@@ -265,7 +276,7 @@ class AppWindow(QMainWindow):
         bw_lut.Build()  # effective built
 
         self.ren = vtk.vtkRenderer()
-
+        self.ren.SetBackground(0.2, 0.2, 0.2)
         self.subAxl = QMdiSubWindow()
         self.subAxl.setWindowTitle("Axial")  # Set Titlebar
         self.subAxl.setFixedSize(419, 367)
@@ -278,7 +289,7 @@ class AppWindow(QMainWindow):
         self.irenAxl = self.vtkWidgetAxl.GetRenderWindow().GetInteractor()
 
         self.viewer = vtk.vtkResliceImageViewer()
-        self.viewer.SetLookupTable(bw_lut)
+        #self.viewer.SetLookupTable(bw_lut)
         self.viewer.SetInputData(filename)
         self.viewer.SetRenderWindow(self.vtkWidgetAxl.GetRenderWindow())
 
@@ -316,7 +327,7 @@ class AppWindow(QMainWindow):
         self.irenCor = self.vtkWidgetCor.GetRenderWindow().GetInteractor()
 
         self.viewerCor = vtk.vtkResliceImageViewer()
-        self.viewerCor.SetLookupTable(bw_lut)
+        #self.viewerCor.SetLookupTable(bw_lut)
         self.viewerCor.SetInputData(filename)
         self.viewerCor.SetRenderWindow(self.vtkWidgetCor.GetRenderWindow())
 
@@ -346,7 +357,7 @@ class AppWindow(QMainWindow):
         self.irenSag = self.vtkWidgetSag.GetRenderWindow().GetInteractor()
 
         self.viewerSag = vtk.vtkResliceImageViewer()
-        self.viewerSag.SetLookupTable(bw_lut)
+        #self.viewerSag.SetLookupTable(bw_lut)
         self.viewerSag.SetInputData(filename)
         self.viewerSag.SetRenderWindow(self.vtkWidgetSag.GetRenderWindow())
 
@@ -548,11 +559,6 @@ class AppWindow(QMainWindow):
         self.vScrollBar.setSliderPosition(int(self.midSlice))
         self.vScrollBar.sliderMoved.connect(self.sliderEvent)
 
-        self.mdi.addSubWindow(self.subVol)
-        self.subVol.show()
-        self.irenVol.Initialize()
-        self.irenVol.Start()
-
         self.vtkWidgetVol.update()
 
         # add windows to central widget
@@ -581,9 +587,9 @@ class AppWindow(QMainWindow):
         fixedImageCheckerboard = QLabel('Fixed Image:')
         movingImageCheckerboard = QLabel('Moving Image:')
 
-        tileSizeCheckerboard = QLabel('Tile Size:')
-        self.tileSizeInput = QLineEdit(self)
-        self.tileSizeInput.setFixedWidth(60)
+        tileNumberCheckerboard = QLabel('Number of tiles:')
+        self.tileNumberInput = QLineEdit(self)
+        self.tileNumberInput.setFixedWidth(60)
 
         checkerboardButton = QPushButton('Apply', self)
 
@@ -593,8 +599,8 @@ class AppWindow(QMainWindow):
         gridCheckerboard.addWidget(self.fixedImage, 1, 1)
         gridCheckerboard.addWidget(movingImageCheckerboard, 2, 0)
         gridCheckerboard.addWidget(self.movingImage, 2, 1)
-        gridCheckerboard.addWidget(tileSizeCheckerboard, 3, 0)
-        gridCheckerboard.addWidget(self.tileSizeInput, 3, 1)
+        gridCheckerboard.addWidget(tileNumberCheckerboard, 3, 0)
+        gridCheckerboard.addWidget(self.tileNumberInput, 3, 1)
         gridCheckerboard.addWidget(checkerboardButton, 4, 0)
 
         checkerboardInput.setLayout(gridCheckerboard)
@@ -607,12 +613,12 @@ class AppWindow(QMainWindow):
         fixed = self.fixedImage.currentIndex()
         moving = self.movingImage.currentIndex()
 
-        if self.tileSizeInput.text() == "":
-            QMessageBox.about(self, "Oops!", "Enter tile size.")
+        if self.tileNumberInput.text() == "":
+            QMessageBox.about(self, "Oops!", "Enter number of tiles.")
         else:
-            size = int(self.tileSizeInput.text())
+            size = int(self.tileNumberInput.text())
             if size <= 0:
-                QMessageBox.about(self, "Oops!", "Tile size ( > 0 ) is needed for this feature.")
+                QMessageBox.about(self, "Oops!", "Tile number ( > 0 ) is needed for this feature.")
             else:
                 self.reloadWindows()
 
@@ -625,49 +631,63 @@ class AppWindow(QMainWindow):
                 checkerboard = sitk.CheckerBoard(vtk2sitk(fixedimg), vtk2sitk(movingimg),
                                              (size, size, size))
 
-                #self.vtk(sitk2vtk(checkerboard), fixed)
-                self.saveFeature(sitk2vtk(checkerboard), fixed)
+                self.saveFeature(sitk2vtk(checkerboard), fixed, 'c')
 
-    def saveFeature(self, file, volumeImage):
+    def saveFeature(self, file, volumeImage, flag):
         self.vIndex = volumeImage
         AppWindow.allfiles.append(file)
 
-        AppWindow.filepaths.append('feature ' + str(AppWindow.count))
-        self.filesListWidget.addItem('feature ' + str(AppWindow.count))
-        self.fixedImage.addItem('feature ' + str(AppWindow.count))
-        self.movingImage.addItem('feature ' + str(AppWindow.count))
-        self.maskImage.addItem('feature ' + str(AppWindow.count))
+        if flag == 'c':
+            AppWindow.filepaths.append('    checkerboard-t' + self.tileNumberInput.text())
+            self.filesListWidget.addItem('    checkerboard-t' + self.tileNumberInput.text())
+            self.fixedImage.addItem('    checkerboard-t' + self.tileNumberInput.text())
+            self.movingImage.addItem('    checkerboard-t' + self.tileNumberInput.text())
+        elif flag == 'o':
+            AppWindow.filepaths.append('    mask-overlay')
+            self.filesListWidget.addItem('    mask-overlay')
+            self.fixedImage.addItem('    mask-overlay')
+            self.masks.addItem('    mask-overlay')
+            #self.movingImage.addItem('    mask-overlay')
+        elif flag == 'd':
+            AppWindow.filepaths.append('    difference-image')
+            self.filesListWidget.addItem('    difference-image')
+            self.fixedImage.addItem('    difference-image')
+            self.movingImage.addItem('    difference-image')
 
         self.vtk(file, self.vIndex)
 
         AppWindow.count = AppWindow.count + 1
 
-    def overlapFeature(self):
+    def overlayFeature(self):
 
         baseImage = QLabel('Base:')
         maskImage = QLabel('Mask:')
-        overlapButton = QPushButton('Apply', self)
 
-        overlapInput = QWidget()
-        gridOverlap = QGridLayout()
+        self.selectedMask = QLabel()
 
-        gridOverlap.addWidget(baseImage, 1, 0)
-        gridOverlap.addWidget(self.fixedImage, 1, 1)
-        gridOverlap.addWidget(maskImage, 2, 0)
-        gridOverlap.addWidget(self.maskImage, 2, 1)
-        gridOverlap.addWidget(overlapButton, 3, 0)
+        overlayButton = QPushButton('Apply', self)
 
-        overlapInput.setLayout(gridOverlap)
-        self.dockWidPanel.setWidget(overlapInput)
+        overlayInput = QWidget()
+        gridOverlay = QGridLayout()
 
-        overlapButton.clicked.connect(self.showOverlap)
+        gridOverlay.addWidget(baseImage, 1, 0)
+        gridOverlay.addWidget(self.fixedImage, 1, 1)
+        gridOverlay.addWidget(maskImage, 2, 0)
+        gridOverlay.addWidget(self.masks, 2, 1)
+        gridOverlay.addWidget(overlayButton, 3, 0)
 
+        overlayInput.setLayout(gridOverlay)
+        self.dockWidPanel.setWidget(overlayInput)
 
-    def showOverlap(self):
+        overlayButton.clicked.connect(self.showOverlay)
+
+    def showOverlay(self):
         fixedBase = self.fixedImage.currentIndex()
-        selectedMask = self.maskImage.currentIndex()
 
-        self.reloadWindows()
+        for x in range(self.filesListWidget.count()):
+            if self.filesListWidget.item(x).text() == self.masks.currentText():
+                selectedMask = x
+                break
 
         baseimg = vtkImageData()
         baseimg.ShallowCopy(AppWindow.allfiles[fixedBase])
@@ -678,37 +698,60 @@ class AppWindow(QMainWindow):
         full = vtk2sitk(baseimg)
         mask = vtk2sitk(maskimg)
 
-        green = [0, 255, 0]
+        sitkOverlay = overlayMask(full, mask)
 
-        background = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
-                                           labelImage=sitk.Cast(mask, sitk.sitkUInt8),
-                                           opacity=0.8, backgroundValue=0)
+        self.reloadWindows()
 
-        mask = sitk.LabelOverlay(image=sitk.Cast(full, sitk.sitkUInt16),
-                                     labelImage=sitk.Cast(mask, sitk.sitkUInt8),
-                                     opacity=0.8, backgroundValue=-1.0, colormap=green)
+        self.saveFeature(sitk2vtk(sitkOverlay), fixedBase, 'o')
 
-        # dice_score = compute_dice_coefficient(sitk.GetArrayFromImage(full),sitk.GetArrayFromImage(mask))
-        # print(dice_score)
+    def differenceFeature(self):
+        fixedDifferenceImage = QLabel('Fixed Image:')
+        movingDifferenceImage = QLabel('Moving Image:')
 
-        image_blender = vtk.vtkImageBlend()
-        image_blender.SetBlendModeToCompound()
-        image_blender.SetCompoundAlpha(True)
-        image_blender.AddInputData(sitk2vtk(background))
-        image_blender.AddInputData(sitk2vtk(mask))
-        image_blender.SetOpacity(0, 0.5)
-        image_blender.SetOpacity(1, 0.5)
-        image_blender.Update()
+        differenceImageButton = QPushButton('Apply', self)
 
-        #self.vtk(image_blender.GetOutput(), fixedBase)
-        self.saveFeature(image_blender.GetOutput(), fixedBase)
+        differenceImageInput = QWidget()
+        gridDifferenceImage = QGridLayout()
+
+        gridDifferenceImage.addWidget(fixedDifferenceImage, 1, 0)
+        gridDifferenceImage.addWidget(self.fixedImage, 1, 1)
+        gridDifferenceImage.addWidget(movingDifferenceImage, 2, 0)
+        gridDifferenceImage.addWidget(self.movingImage, 2, 1)
+        gridDifferenceImage.addWidget(differenceImageButton, 3, 0)
+
+        differenceImageInput.setLayout(gridDifferenceImage)
+        self.dockWidPanel.setWidget(differenceImageInput)
+
+        differenceImageButton.clicked.connect(self.showDifferenceImage)
+
+    def showDifferenceImage(self):
+        fixedDI = self.fixedImage.currentIndex()
+        movingDI = self.movingImage.currentIndex()
+
+        self.reloadWindows()
+
+        fixedImgDI = vtkImageData()
+        fixedImgDI.ShallowCopy(AppWindow.allfiles[fixedDI])
+
+        movingImgDI = vtkImageData()
+        movingImgDI.ShallowCopy(AppWindow.allfiles[movingDI])
+
+        imageMath = vtk.vtkImageMathematics()
+        imageMath.SetOperationToSubtract()
+        imageMath.SetInput1Data(fixedImgDI)
+        imageMath.SetInput2Data(movingImgDI)
+        imageMath.Update()
+
+        self.saveFeature(imageMath.GetOutput(), fixedDI, 'd')
 
     def plugin_handler(self):
         item = str(self.pluginsListWidget.selectedItems()[0].text())
         if item == 'Checkerboard':
             self.checkerboardFeature()
-        elif item == 'Label Overlap':
-            self.overlapFeature()
+        elif item == 'Mask Overlay':
+            self.overlayFeature()
+        elif item == 'Difference Image':
+            self.differenceFeature()
 
     def docker_widget(self):
 
@@ -720,13 +763,10 @@ class AppWindow(QMainWindow):
 
         self.pluginsListWidget = QListWidget()
         self.pluginsListWidget.addItem('Checkerboard')
-        self.pluginsListWidget.addItem('Label Overlap')
+        self.pluginsListWidget.addItem('Mask Overlay')
+        self.pluginsListWidget.addItem('Difference Image')
         self.pluginsListWidget.setSelectionMode(QAbstractItemView.SingleSelection)
         self.pluginsListWidget.itemClicked.connect(self.plugin_handler)
-
-        #seg_btn = QPushButton('Label Overlap', self)
-        #seg_btn.setFlat(True)
-        #seg_btn.clicked.connect(self.overlap)
 
         dockWid.setWidget(self.pluginsListWidget)
         dockWid.setFloating(False)
@@ -740,8 +780,8 @@ class AppWindow(QMainWindow):
 
         self.evalMetricsListWidget = QListWidget()
         self.evalMetricsListWidget.addItem('Dice')
-        self.evalMetricsListWidget.addItem('Average Distance')
         self.evalMetricsListWidget.addItem('Hausdorff')
+        self.evalMetricsListWidget.itemClicked.connect(self.metric_handler)
 
         dockWidEval.setWidget(self.evalMetricsListWidget)
         dockWidEval.setFloating(False)
@@ -773,21 +813,88 @@ class AppWindow(QMainWindow):
         selectedRow = self.filesListWidget.currentRow()
         itemName = item.text()
 
-        if 'feature' in itemName:
+        if '.' not in itemName:
             self.reloadWindows()
             self.vtk(AppWindow.allfiles[selectedRow], self.vIndex)
         else:
             self.reloadWindows()
             self.vtk(AppWindow.allfiles[selectedRow], selectedRow)
 
+    def metric_handler(self):
+        item = str(self.evalMetricsListWidget.selectedItems()[0].text())
+        if item == 'Dice':
+            self.diceFlag = True
+            self.metrics()
+        elif item == 'Hausdorff':
+            self.hdFlag = True
+            self.metrics()
+
+    def metrics(self):
+        fixedS = QLabel('Fixed:')
+        movingS = QLabel('Moving:')
+        resultMetric = QLabel('Score:')
+
+        self.masksFixed = QComboBox()
+        self.masksMoving = QComboBox()
+
+        for x in range(self.masks.count()):
+            self.masksFixed.addItem(self.masks.itemText(x))
+            self.masksMoving.addItem(self.masks.itemText(x))
+
+        self.resultScore = QLabel()
+
+        metricButton = QPushButton('Apply', self)
+
+        metricInput = QWidget()
+        gridMetric = QGridLayout()
+
+        gridMetric.addWidget(fixedS, 1, 0)
+        gridMetric.addWidget(self.masksFixed, 1, 1)
+        gridMetric.addWidget(movingS, 2, 0)
+        gridMetric.addWidget(self.masksMoving, 2, 1)
+        gridMetric.addWidget(resultMetric, 3, 0)
+        gridMetric.addWidget(self.resultScore, 3, 1)
+        gridMetric.addWidget(metricButton, 4, 0)
+
+        metricInput.setLayout(gridMetric)
+        self.dockWidPanel.setWidget(metricInput)
+
+        metricButton.clicked.connect(self.showMetric)
+
+    def showMetric(self):
+        setFixed = False
+        setMoving = False
+
+        for x in AppWindow.filepaths:
+            if self.masksFixed.currentText() in x:
+                mFixed = self.readImage(x)
+                setFixed = True
+            if self.masksMoving.currentText() in x:
+                mMoving = self.readImage(x)
+                setMoving = True
+            if setFixed and setMoving:
+                break
+
+        if self.diceFlag:
+            dice_score = compute_dice(sitk.GetArrayFromImage(vtk2sitk(mFixed)), sitk.GetArrayFromImage(vtk2sitk(mMoving)), [1])
+            self.resultScore.setText(str(dice_score[0]))
+        else:
+            hd_score = compute_hd95(sitk.GetArrayFromImage(vtk2sitk(mFixed)),
+                                      sitk.GetArrayFromImage(vtk2sitk(mMoving)), [1])
+            self.resultScore.setText(str(hd_score[0]))
+
+
     def add_dataset(self, filename):
 
         name = filename.split("/")[-1]
         self.filesListWidget.addItem(name)
-        self.fixedImage.addItem(name)
-        self.movingImage.addItem(name)
-        self.maskImage.addItem(name)
+        if self.binaryFlag:
+            self.masks.addItem(name)
+        else:
+            self.fixedImage.addItem(name)
+            self.movingImage.addItem(name)
 
+        self.binaryFlag = False
         AppWindow.count = AppWindow.count + 1
 
 # Press the green button in the gutter to run the script.
