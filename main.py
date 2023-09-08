@@ -161,12 +161,15 @@ class AppWindow(QMainWindow):
 
     def sliderEvent(self):
         self.sliderPosition = self.vScrollBar.sliderPosition()
-        newPosition = self.setSliderPosition(self.sliderPosition)
 
         # update volume
-        self.axial.SetDisplayExtent(0, 255, 0, 255, newPosition[1], newPosition[1])
-        self.sagittal.SetDisplayExtent(128, 128, 0, 255, newPosition[0], newPosition[2])
-        self.coronal.SetDisplayExtent(0, 255, 128, 128, newPosition[0], newPosition[2])
+        self.axial.SetDisplayExtent(0, 255, 0, 255, self.sliderPosition, self.sliderPosition)
+        self.sagittal.SetDisplayExtent(self.sliderPosition, self.sliderPosition, 0, 255, 0, 223)
+
+        if self.sliderPosition > 191:
+            self.coronal.SetDisplayExtent(0, 223, 191, 191, 0, 223)
+        else:
+            self.coronal.SetDisplayExtent(0, 223, self.sliderPosition, self.sliderPosition, 0, 223)
 
         # update images
         if self.axlFlag:
@@ -207,30 +210,20 @@ class AppWindow(QMainWindow):
         if p == 1:
             pos = self.vScrollBarAxl.sliderPosition()
             self.viewer.SetSlice(pos)
-            slicePosition = self.setSliderPosition(pos)
-            self.axial.SetDisplayExtent(0, 255, 0, 255, slicePosition[1], slicePosition[1])
+            self.axial.SetDisplayExtent(0, 255, 0, 255, pos, pos)
         elif p == 2:
             pos = self.vScrollBarCor.sliderPosition()
             self.viewerCor.SetSlice(pos)
-            slicePosition = self.setSliderPosition(pos)
-            self.coronal.SetDisplayExtent(0, 255, 128, 128, slicePosition[0], slicePosition[2])
+            if pos > 191:
+                self.coronal.SetDisplayExtent(0, 223, 191, 191, 0, 223)
+            else:
+                self.coronal.SetDisplayExtent(0, 223, pos, pos, 0, 223)
         else:
             pos = self.vScrollBarSag.sliderPosition()
             self.viewerSag.SetSlice(pos)
-            slicePosition = self.setSliderPosition(pos)
-            self.sagittal.SetDisplayExtent(128, 128, 0, 255, slicePosition[0], slicePosition[2])
+            self.sagittal.SetDisplayExtent(pos, pos, 0, 255, 0, 223)
 
         self.vtkWidgetVol.update()
-
-    def setSliderPosition(self, position):
-        zmax = position * 2
-        if zmax > self.maxSlice:
-            zmax = self.maxSlice
-        zmid = position
-        zmin = zmid - zmax
-        if zmin < 0:
-            zmin = 0
-        return [zmin, zmid, zmax]
 
     def reloadWindows(self):
         self.mdi.removeSubWindow(self.subSag)
@@ -575,7 +568,7 @@ class AppWindow(QMainWindow):
 
         self.sagittal = vtkImageActor()
         self.sagittal.GetMapper().SetInputConnection(sagittal_colors.GetOutputPort())
-        self.sagittal.SetDisplayExtent(128, 128, 0, 255, 0, 223)
+        self.sagittal.SetDisplayExtent(int(self.midSlice), int(self.midSlice), 0, 255, 0, 223)
         self.sagittal.ForceOpaqueOn()
 
         # Create the second (axial) plane of the three planes. We use the
@@ -599,7 +592,7 @@ class AppWindow(QMainWindow):
 
         self.coronal = vtkImageActor()
         self.coronal.GetMapper().SetInputConnection(coronal_colors.GetOutputPort())
-        self.coronal.SetDisplayExtent(0, 255, 128, 128, 0, 233)
+        self.coronal.SetDisplayExtent(0, 223, int(self.midSlice), int(self.midSlice), 0, 223)
         self.coronal.ForceOpaqueOn()
 
         styleVol = vtk.vtkInteractorStyle3D()
