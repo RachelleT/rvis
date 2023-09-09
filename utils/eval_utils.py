@@ -273,11 +273,11 @@ def make_isotropic(
     )
 
 
-def overlayMask(image, mask):
+def overlayMask(image, mask, mColormap, alphaNumber):
     # Dictionary with functions mapping a scalar image to a three component vector image
     image_mappings = {'grey': lambda x: sitk.ScalarToRGBColormap(x, sitk.ScalarToRGBColormapImageFilter.Grey),
-                      'jet': lambda x: sitk.ScalarToRGBColormap(x, sitk.ScalarToRGBColormapImageFilter.Jet),
-                      'hot': lambda x: sitk.ScalarToRGBColormap(x, sitk.ScalarToRGBColormapImageFilter.Hot)}
+                      'Jet': lambda x: sitk.ScalarToRGBColormap(x, sitk.ScalarToRGBColormapImageFilter.Jet),
+                      'Hot': lambda x: sitk.ScalarToRGBColormap(x, sitk.ScalarToRGBColormapImageFilter.Hot)}
 
     image = make_isotropic(image, interpolator=sitk.sitkLinear)
     segmentation = make_isotropic(mask, interpolator=sitk.sitkNearestNeighbor)
@@ -287,7 +287,7 @@ def overlayMask(image, mask):
 
     colormap = 'grey'
     vec_image = image_mappings[colormap](image_255)
-    vec_segmentation = image_mappings['hot'](segmentation)
-    vec_combined = sitk.Cast(alpha_blend(image1=vec_image, image2=vec_segmentation, alpha=0.2, mask2=segmentation == 1),
+    vec_segmentation = image_mappings[mColormap](segmentation)
+    vec_combined = sitk.Cast(alpha_blend(image1=vec_image, image2=vec_segmentation, alpha=alphaNumber, mask2=segmentation == 1),
                              sitk.sitkVectorUInt8)
     return vec_combined

@@ -16,7 +16,6 @@ from vtkmodules.vtkFiltersCore import vtkFlyingEdges3D, vtkStripper
 from vtkmodules.vtkIOImage import vtkJPEGWriter, vtkTIFFWriter, vtkPNGWriter, vtkNIFTIImageWriter
 from vtkmodules.vtkImagingCore import vtkImageMapToColors
 from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor, vtkImageActor, vtkCamera
-
 from utils.eval_utils import compute_dice, compute_hd95, binary_image, overlayMask
 
 
@@ -25,6 +24,7 @@ from utils.eval_utils import compute_dice, compute_hd95, binary_image, overlayMa
 
 class AppWindow(QMainWindow):
     count = 0
+    feature_count = 0
     checkboxes = []
     allfiles = []
     filepaths = []
@@ -43,7 +43,6 @@ class AppWindow(QMainWindow):
         self.binaryFlag = False
 
         # for fixing planes
-
         self.axlFlag = False
         self.corFlag = False
         self.sagFlag = False
@@ -76,9 +75,8 @@ class AppWindow(QMainWindow):
         navToolBar = self.addToolBar("Navigation")
         newAction = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+D', self.file_open_dir)
         tileAction = self.create_action('Tiled Mode', 'icons/tile_icon.png', 'Ctrl+T', self.show_tiled)
-        toolAction = self.create_action('Show tool widget', 'icons/tool_icon.png', 'F2', self.docker_widget)
 
-        self.add_action(navToolBar, (newAction, tileAction, toolAction))
+        self.add_action(navToolBar, (newAction, tileAction))
         navToolBar.setFloatable(False)
 
     def create_action(self, text, icon=None, shortcut=None, implement=None, signal='triggered'):
@@ -163,28 +161,68 @@ class AppWindow(QMainWindow):
 
     def sliderEvent(self):
         self.sliderPosition = self.vScrollBar.sliderPosition()
-        zmax = self.sliderPosition * 2
-        if zmax > self.maxSlice:
-            zmax = self.maxSlice
-        zmid = self.sliderPosition
-        zmin = zmid - zmax
-        if zmin < 0:
-            zmin = 0
 
         # update volume
-        self.axial.SetDisplayExtent(0, 255, 0, 255, zmid, zmid)
-        self.sagittal.SetDisplayExtent(128, 128, 0, 255, zmin, zmax)
-        self.coronal.SetDisplayExtent(0, 255, 128, 128, zmin, zmax)
+        self.axial.SetDisplayExtent(0, 255, 0, 255, self.sliderPosition, self.sliderPosition)
+        self.sagittal.SetDisplayExtent(self.sliderPosition, self.sliderPosition, 0, 255, 0, 223)
+
+        if self.sliderPosition > 191:
+            self.coronal.SetDisplayExtent(0, 223, 191, 191, 0, 223)
+        else:
+            self.coronal.SetDisplayExtent(0, 223, self.sliderPosition, self.sliderPosition, 0, 223)
 
         # update images
-        self.viewer.SetSlice(self.sliderPosition)
-        self.viewerSag.SetSlice(self.sliderPosition)
-        self.viewerCor.SetSlice(self.sliderPosition)
+        if self.axlFlag:
+            self.viewerCor.SetSlice(self.sliderPosition)
+            self.viewerSag.SetSlice(self.sliderPosition)
+
+            self.vScrollBarCor.setSliderPosition(self.sliderPosition)
+            self.vScrollBarSag.setSliderPosition(self.sliderPosition)
+        elif self.corFlag:
+            self.viewer.SetSlice(self.sliderPosition)
+            self.viewerSag.SetSlice(self.sliderPosition)
+
+            self.vScrollBarAxl.setSliderPosition(self.sliderPosition)
+            self.viewerSag.SetSlice(self.sliderPosition)
+        elif self.sagFlag:
+            self.viewer.SetSlice(self.sliderPosition)
+            self.viewerCor.SetSlice(self.sliderPosition)
+
+            self.vScrollBarAxl.setSliderPosition(self.sliderPosition)
+            self.vScrollBarCor.setSliderPosition(self.sliderPosition)
+        else:
+            self.viewer.SetSlice(self.sliderPosition)
+            self.viewerCor.SetSlice(self.sliderPosition)
+            self.viewerSag.SetSlice(self.sliderPosition)
+
+            # update sliders
+            self.vScrollBarAxl.setSliderPosition(self.sliderPosition)
+            self.vScrollBarCor.setSliderPosition(self.sliderPosition)
+            self.vScrollBarSag.setSliderPosition(self.sliderPosition)
 
         # update widgets
         self.vtkWidgetAxl.update()
         self.vtkWidgetSag.update()
         self.vtkWidgetCor.update()
+        self.vtkWidgetVol.update()
+
+    def sliderEventPanels(self, p):
+        if p == 1:
+            pos = self.vScrollBarAxl.sliderPosition()
+            self.viewer.SetSlice(pos)
+            self.axial.SetDisplayExtent(0, 255, 0, 255, pos, pos)
+        elif p == 2:
+            pos = self.vScrollBarCor.sliderPosition()
+            self.viewerCor.SetSlice(pos)
+            if pos > 191:
+                self.coronal.SetDisplayExtent(0, 223, 191, 191, 0, 223)
+            else:
+                self.coronal.SetDisplayExtent(0, 223, pos, pos, 0, 223)
+        else:
+            pos = self.vScrollBarSag.sliderPosition()
+            self.viewerSag.SetSlice(pos)
+            self.sagittal.SetDisplayExtent(pos, pos, 0, 255, 0, 223)
+
         self.vtkWidgetVol.update()
 
     def reloadWindows(self):
@@ -267,14 +305,6 @@ class AppWindow(QMainWindow):
             self.reader.SetFileName(AppWindow.filepaths[flag])
             self.reader.Update()
 
-        # Start by creating a black/white lookup table.
-        bw_lut = vtkLookupTable()
-        bw_lut.SetTableRange(0, 2000)
-        bw_lut.SetSaturationRange(0, 0)
-        bw_lut.SetHueRange(0, 0)
-        bw_lut.SetValueRange(0, 1)
-        bw_lut.Build()  # effective built
-
         self.ren = vtk.vtkRenderer()
         self.ren.SetBackground(0.2, 0.2, 0.2)
         self.subAxl = QMdiSubWindow()
@@ -289,7 +319,6 @@ class AppWindow(QMainWindow):
         self.irenAxl = self.vtkWidgetAxl.GetRenderWindow().GetInteractor()
 
         self.viewer = vtk.vtkResliceImageViewer()
-        #self.viewer.SetLookupTable(bw_lut)
         self.viewer.SetInputData(filename)
         self.viewer.SetRenderWindow(self.vtkWidgetAxl.GetRenderWindow())
 
@@ -311,6 +340,14 @@ class AppWindow(QMainWindow):
         self.viewer.GetRenderer().ResetCamera()
         self.viewer.Render()
 
+        self.vScrollBarAxl = QScrollBar(self.subAxl)
+        self.vScrollBarAxl.setEnabled(True)
+        self.vScrollBarAxl.setOrientation(QtCore.Qt.Vertical)
+        self.vScrollBarAxl.setGeometry(409, 30, 10, 367)
+        self.vScrollBarAxl.setMinimum(self.viewer.GetSliceMin())
+        self.vScrollBarAxl.setMaximum(maxSlice)
+        self.vScrollBarAxl.setSliderPosition(int(midSlice))
+
         self.vtkWidgetAxl.update()
 
         # coronal
@@ -327,7 +364,6 @@ class AppWindow(QMainWindow):
         self.irenCor = self.vtkWidgetCor.GetRenderWindow().GetInteractor()
 
         self.viewerCor = vtk.vtkResliceImageViewer()
-        #self.viewerCor.SetLookupTable(bw_lut)
         self.viewerCor.SetInputData(filename)
         self.viewerCor.SetRenderWindow(self.vtkWidgetCor.GetRenderWindow())
 
@@ -340,6 +376,14 @@ class AppWindow(QMainWindow):
         self.viewerCor.SetSliceOrientationToXZ()
         self.viewerCor.GetRenderer().ResetCamera()
         self.viewerCor.Render()
+
+        self.vScrollBarCor = QScrollBar(self.subCor)
+        self.vScrollBarCor.setEnabled(True)
+        self.vScrollBarCor.setOrientation(QtCore.Qt.Vertical)
+        self.vScrollBarCor.setGeometry(409, 30, 10, 367)
+        self.vScrollBarCor.setMinimum(self.viewerCor.GetSliceMin())
+        self.vScrollBarCor.setMaximum(maxSlice)
+        self.vScrollBarCor.setSliderPosition(int(midSlice))
 
         self.vtkWidgetCor.update()
 
@@ -357,7 +401,6 @@ class AppWindow(QMainWindow):
         self.irenSag = self.vtkWidgetSag.GetRenderWindow().GetInteractor()
 
         self.viewerSag = vtk.vtkResliceImageViewer()
-        #self.viewerSag.SetLookupTable(bw_lut)
         self.viewerSag.SetInputData(filename)
         self.viewerSag.SetRenderWindow(self.vtkWidgetSag.GetRenderWindow())
 
@@ -371,7 +414,20 @@ class AppWindow(QMainWindow):
         self.viewerSag.GetRenderer().ResetCamera()
         self.viewerSag.Render()
 
+        self.vScrollBarSag = QScrollBar(self.subSag)
+        self.vScrollBarSag.setEnabled(True)
+        self.vScrollBarSag.setOrientation(QtCore.Qt.Vertical)
+        self.vScrollBarSag.setGeometry(409, 30, 10, 367)
+        self.vScrollBarSag.setMinimum(self.viewerSag.GetSliceMin())
+        self.vScrollBarSag.setMaximum(maxSlice)
+        self.vScrollBarSag.setSliderPosition(int(midSlice))
+
         self.vtkWidgetSag.update()
+
+        # add event to scrollbars
+        self.vScrollBarAxl.sliderMoved.connect(lambda: self.sliderEventPanels(1))
+        self.vScrollBarCor.sliderMoved.connect(lambda: self.sliderEventPanels(2))
+        self.vScrollBarSag.sliderMoved.connect(lambda: self.sliderEventPanels(3))
 
         # volume
 
@@ -471,6 +527,14 @@ class AppWindow(QMainWindow):
         bone.SetMapper(bone_mapper)
         bone.GetProperty().SetDiffuseColor(self.colors.GetColor3d('Ivory'))
 
+        # Start by creating a black/white lookup table.
+        bw_lut = vtkLookupTable()
+        bw_lut.SetTableRange(0, 2000)
+        bw_lut.SetSaturationRange(0, 0)
+        bw_lut.SetHueRange(0, 0)
+        bw_lut.SetValueRange(0, 1)
+        bw_lut.Build()  # effective built
+
         # Now create a lookup table that consists of the full hue circle
         # (from HSV).
         hue_lut = vtkLookupTable()
@@ -504,7 +568,7 @@ class AppWindow(QMainWindow):
 
         self.sagittal = vtkImageActor()
         self.sagittal.GetMapper().SetInputConnection(sagittal_colors.GetOutputPort())
-        self.sagittal.SetDisplayExtent(128, 128, 0, 255, 0, 223)
+        self.sagittal.SetDisplayExtent(int(self.midSlice), int(self.midSlice), 0, 255, 0, 223)
         self.sagittal.ForceOpaqueOn()
 
         # Create the second (axial) plane of the three planes. We use the
@@ -528,7 +592,7 @@ class AppWindow(QMainWindow):
 
         self.coronal = vtkImageActor()
         self.coronal.GetMapper().SetInputConnection(coronal_colors.GetOutputPort())
-        self.coronal.SetDisplayExtent(0, 255, 128, 128, 0, 233)
+        self.coronal.SetDisplayExtent(0, 223, int(self.midSlice), int(self.midSlice), 0, 223)
         self.coronal.ForceOpaqueOn()
 
         styleVol = vtk.vtkInteractorStyle3D()
@@ -634,25 +698,25 @@ class AppWindow(QMainWindow):
                 self.saveFeature(sitk2vtk(checkerboard), fixed, 'c')
 
     def saveFeature(self, file, volumeImage, flag):
+        AppWindow.feature_count += 1
         self.vIndex = volumeImage
         AppWindow.allfiles.append(file)
 
         if flag == 'c':
-            AppWindow.filepaths.append('    checkerboard-t' + self.tileNumberInput.text())
-            self.filesListWidget.addItem('    checkerboard-t' + self.tileNumberInput.text())
-            self.fixedImage.addItem('    checkerboard-t' + self.tileNumberInput.text())
-            self.movingImage.addItem('    checkerboard-t' + self.tileNumberInput.text())
+            AppWindow.filepaths.append('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.movingImage.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
         elif flag == 'o':
-            AppWindow.filepaths.append('    mask-overlay')
-            self.filesListWidget.addItem('    mask-overlay')
-            self.fixedImage.addItem('    mask-overlay')
-            self.masks.addItem('    mask-overlay')
-            #self.movingImage.addItem('    mask-overlay')
+            AppWindow.filepaths.append('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.masks.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
         elif flag == 'd':
-            AppWindow.filepaths.append('    difference-image')
-            self.filesListWidget.addItem('    difference-image')
-            self.fixedImage.addItem('    difference-image')
-            self.movingImage.addItem('    difference-image')
+            AppWindow.filepaths.append('    difference-image-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem('    difference-image-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem('    difference-image-' + str(AppWindow.feature_count))
+            self.movingImage.addItem('    difference-image-' + str(AppWindow.feature_count))
 
         self.vtk(file, self.vIndex)
 
@@ -662,8 +726,13 @@ class AppWindow(QMainWindow):
 
         baseImage = QLabel('Base:')
         maskImage = QLabel('Mask:')
+        colorMap = QLabel('Mask Colormap: ')
+        alphaBlend = QLabel('Alpha Blend: ')
 
-        self.selectedMask = QLabel()
+        self.maskColormap = QComboBox()
+        self.maskColormap.addItems(['Hot', 'Jet'])
+
+        self.alphaBlendNumber = QLineEdit()
 
         overlayButton = QPushButton('Apply', self)
 
@@ -674,7 +743,11 @@ class AppWindow(QMainWindow):
         gridOverlay.addWidget(self.fixedImage, 1, 1)
         gridOverlay.addWidget(maskImage, 2, 0)
         gridOverlay.addWidget(self.masks, 2, 1)
-        gridOverlay.addWidget(overlayButton, 3, 0)
+        gridOverlay.addWidget(colorMap, 3, 0)
+        gridOverlay.addWidget(self.maskColormap, 3, 1)
+        gridOverlay.addWidget(alphaBlend, 4, 0)
+        gridOverlay.addWidget(self.alphaBlendNumber, 4, 1)
+        gridOverlay.addWidget(overlayButton, 5, 0)
 
         overlayInput.setLayout(gridOverlay)
         self.dockWidPanel.setWidget(overlayInput)
@@ -698,7 +771,7 @@ class AppWindow(QMainWindow):
         full = vtk2sitk(baseimg)
         mask = vtk2sitk(maskimg)
 
-        sitkOverlay = overlayMask(full, mask)
+        sitkOverlay = overlayMask(full, mask, self.maskColormap.currentText(), float(self.alphaBlendNumber.text()))
 
         self.reloadWindows()
 
