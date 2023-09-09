@@ -24,6 +24,7 @@ from utils.eval_utils import compute_dice, compute_hd95, binary_image, overlayMa
 
 class AppWindow(QMainWindow):
     count = 0
+    feature_count = 0
     checkboxes = []
     allfiles = []
     filepaths = []
@@ -74,9 +75,8 @@ class AppWindow(QMainWindow):
         navToolBar = self.addToolBar("Navigation")
         newAction = self.create_action('New', 'icons/plus_icon.png', 'Ctrl+D', self.file_open_dir)
         tileAction = self.create_action('Tiled Mode', 'icons/tile_icon.png', 'Ctrl+T', self.show_tiled)
-        toolAction = self.create_action('Reset Panels', 'icons/restore_icon.png', 'F2', self.docker_widget)
 
-        self.add_action(navToolBar, (newAction, tileAction, toolAction))
+        self.add_action(navToolBar, (newAction, tileAction))
         navToolBar.setFloatable(False)
 
     def create_action(self, text, icon=None, shortcut=None, implement=None, signal='triggered'):
@@ -698,24 +698,25 @@ class AppWindow(QMainWindow):
                 self.saveFeature(sitk2vtk(checkerboard), fixed, 'c')
 
     def saveFeature(self, file, volumeImage, flag):
+        AppWindow.feature_count += 1
         self.vIndex = volumeImage
         AppWindow.allfiles.append(file)
 
         if flag == 'c':
-            AppWindow.filepaths.append('    checkerboard-t' + self.tileNumberInput.text())
-            self.filesListWidget.addItem('    checkerboard-t' + self.tileNumberInput.text())
-            self.fixedImage.addItem('    checkerboard-t' + self.tileNumberInput.text())
-            self.movingImage.addItem('    checkerboard-t' + self.tileNumberInput.text())
+            AppWindow.filepaths.append('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.movingImage.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
         elif flag == 'o':
-            AppWindow.filepaths.append('    mask-overlay-a' + self.alphaBlendNumber.text())
-            self.filesListWidget.addItem('    mask-overlay-a' + self.alphaBlendNumber.text())
-            self.fixedImage.addItem('    mask-overlay-a' + self.alphaBlendNumber.text())
-            self.masks.addItem('    mask-overlay-a' + self.alphaBlendNumber.text())
+            AppWindow.filepaths.append('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.masks.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
         elif flag == 'd':
-            AppWindow.filepaths.append('    difference-image')
-            self.filesListWidget.addItem('    difference-image')
-            self.fixedImage.addItem('    difference-image')
-            self.movingImage.addItem('    difference-image')
+            AppWindow.filepaths.append('    difference-image-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem('    difference-image-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem('    difference-image-' + str(AppWindow.feature_count))
+            self.movingImage.addItem('    difference-image-' + str(AppWindow.feature_count))
 
         self.vtk(file, self.vIndex)
 
