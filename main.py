@@ -1,6 +1,7 @@
 # This is a sample Python script.
 import os
 import sys
+import pydoc
 import SimpleITK as sitk
 from SimpleITK.utilities import sitk2vtk, vtk2sitk
 import vtk
@@ -34,7 +35,7 @@ class AppWindow(QMainWindow):
         self.setWindowIcon(QtGui.QIcon('icons/schwi_icon.png'))
         self.setWindowTitle("RVis")
 
-        self.setAcceptDrops(True) # for drag and drop
+        self.setAcceptDrops(True)  # for drag and drop
 
         # for feature panel
         self.fixedImage = QComboBox()
@@ -42,7 +43,7 @@ class AppWindow(QMainWindow):
         self.masks = QComboBox()
         self.binaryFlag = False
 
-        # for fixing planes
+        # for adjusting the right panel via scrollbars
         self.axlFlag = False
         self.corFlag = False
         self.sagFlag = False
@@ -54,7 +55,7 @@ class AppWindow(QMainWindow):
         self.menu_bar()
         self.tool_bar()
         self.docker_widget()
-        self.docker_widgetR()
+        self.docker_widgetFiles()
         self.show()
 
     def menu_bar(self):
@@ -63,7 +64,6 @@ class AppWindow(QMainWindow):
         file_directory = self.create_action('Open Directory', 'icons/directory_icon.png', 'Ctrl+D', self.file_open_dir)
         file_image = self.create_action('Open Image', 'icons/upload_icon.png', 'Ctrl+N', self.file_open_img)
         save_image = self.create_action('Save Image', 'icons/save_icon.png', 'Ctrl+S', self.file_save_img)
-        # file_exit = self.create_action('Exit', 'icons/exit_icon.png', 'Ctrl+Q', self.close)
         self.add_action(file, (file_directory, file_image, save_image))
 
         view = bar.addMenu('View')
@@ -96,40 +96,55 @@ class AppWindow(QMainWindow):
             else:
                 dest.addAction(action)
 
-    def dragEnterEvent(self, event):
+    def dragEnterEvent(self, event):  # needed for drag event
         if event.mimeData().hasImage:
             event.accept()
         else:
             event.ignore()
 
-    def dropEvent(self, event):
-        if event.mimeData().hasImage:
+    def dropEvent(self, event):  # needed for drop event
+        if event.mimeData().hasImage:  # checks if dropped item is an image
             event.setDropAction(QtCore.Qt.CopyAction)
-            file_path = event.mimeData().urls()[0].toLocalFile()
+            file_path = event.mimeData().urls()[0].toLocalFile()  # retrieve file path of image
             AppWindow.filepaths.append(file_path)
-            file = self.readImage(file_path)
+            file = self.readImage(file_path)  # read an image
             AppWindow.allfiles.append(file)
-            if self.binaryImageCheck(file):
+            if self.binaryImageCheck(file):  # checks if dropped image is a mask
                 self.binaryFlag = True
-            self.add_dataset(file_path)
+            self.add_dataset(file_path)  # add drop file to file manager
             if AppWindow.count == 1:
-                self.vtk(file, "f")
+                self.vtk(file, -1)  # load panels and show image
             else:
                 self.reloadWindows()
-                self.vtk(file, "f")
+                self.vtk(file, -1)
             event.accept()
         else:
             event.ignore()
 
     def binaryImageCheck(self, imageFile):
+        """ checks if an image is a binary image
+
+        Parameters:
+        imageFile: vtk object (self.reader.GetOutput())
+
+        Returns: bool
+
+        """
         inputImg = vtkImageData()
         inputImg.ShallowCopy(imageFile)
         npImage = sitk.GetArrayFromImage(vtk2sitk(inputImg))
         return binary_image(npImage)
 
     def readImage(self, filename):
+        """ determine the appropriate vtk reader for an image
 
-        if len(filename.split(".")) == 2:
+        Parameters:
+        filename: string (file path)
+
+        Returns: vtk object (self.reader.GetOutput())
+
+        """
+        if len(filename.split(".")) == 2: # gets file extension
             base, ext = filename.split(".")
         else:
             base, ext, fmt = filename.split(".")
@@ -159,7 +174,7 @@ class AppWindow(QMainWindow):
         self.reader.Update()
         return self.reader.GetOutput()
 
-    def sliderEvent(self):
+    def sliderEvent(self):  # controls the sliding through slices of the volume
         self.sliderPosition = self.vScrollBar.sliderPosition()
 
         # update volume
@@ -206,26 +221,26 @@ class AppWindow(QMainWindow):
         self.vtkWidgetCor.update()
         self.vtkWidgetVol.update()
 
-    def sliderEventPanels(self, p):
-        if p == 1:
+    def sliderEventPanels(self, p):  # controls the sliders for individual panels
+        if p == 1:  # axial slider
             pos = self.vScrollBarAxl.sliderPosition()
             self.viewer.SetSlice(pos)
             self.axial.SetDisplayExtent(0, 255, 0, 255, pos, pos)
-        elif p == 2:
+        elif p == 2:  # coronal slider
             pos = self.vScrollBarCor.sliderPosition()
             self.viewerCor.SetSlice(pos)
-            if pos > 191:
+            if pos > 191:  # coronal slice only goes up to 191?
                 self.coronal.SetDisplayExtent(0, 223, 191, 191, 0, 223)
             else:
                 self.coronal.SetDisplayExtent(0, 223, pos, pos, 0, 223)
-        else:
+        else: # sagittal slider
             pos = self.vScrollBarSag.sliderPosition()
             self.viewerSag.SetSlice(pos)
             self.sagittal.SetDisplayExtent(pos, pos, 0, 255, 0, 223)
 
         self.vtkWidgetVol.update()
 
-    def reloadWindows(self):
+    def reloadWindows(self): # reload panels
         self.mdi.removeSubWindow(self.subSag)
         self.mdi.removeSubWindow(self.subVol)
         self.mdi.removeSubWindow(self.subAxl)
@@ -237,7 +252,7 @@ class AppWindow(QMainWindow):
     def show_tiled(self):
         self.mdi.tileSubWindows()
 
-    def file_open_dir(self):
+    def file_open_dir(self):  # load directory from menu bar
         AppWindow.count = AppWindow.count + 1
         self.filename = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
 
@@ -246,10 +261,9 @@ class AppWindow(QMainWindow):
             self.reader.SetDirectoryName(self.filename)
             self.reader.Update()
             self.add_dataset(self.filename)
-            self.vtk(self.reader.GetOutput(), "d")
+            self.vtk(self.reader.GetOutput(), -1)
 
-
-    def file_open_img(self):
+    def file_open_img(self):  # load file from menu bar
         self.filename = QtWidgets.QFileDialog.getOpenFileName(self, "Select File", "Images (*.jpeg *.jpg "
                                                                                    "*nii *gz)")
 
@@ -259,15 +273,15 @@ class AppWindow(QMainWindow):
             AppWindow.allfiles.append(file)
             self.add_dataset(self.filename[0])
             if AppWindow.count == 1:
-                self.vtk(file, "f")
+                self.vtk(file, -1)
             else:
                 self.reloadWindows()
-                self.vtk(file, "f")
+                self.vtk(file, -1)
 
-    def file_save_img(self):
+    def file_save_img(self):  # saving a file
         # selecting file path
         filePath, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Image", "",
-                                                  "PNG(*.png);;JPEG(*.jpg *.jpeg);;NII(*.nii);;All Files(*.*) ")
+                                                            "PNG(*.png);;JPEG(*.jpg *.jpeg);;NII(*.nii);;All Files(*.*) ")
 
         if filePath:
             # Select the writer to use.
@@ -289,7 +303,7 @@ class AppWindow(QMainWindow):
 
             fileRow = self.filesListWidget.currentRow()
 
-            writer.SetInputData(AppWindow.allfiles[fileRow]) # self.reader to be updated
+            writer.SetInputData(AppWindow.allfiles[fileRow])  # self.reader to be updated
             writer.SetFileName(filePath)
             # this information will override the reader's header
             writer.SetQFac(self.reader.GetQFac())
@@ -298,11 +312,18 @@ class AppWindow(QMainWindow):
             writer.SetSFormMatrix(self.reader.GetSFormMatrix())
             writer.Write()
 
-    def vtk(self, filename, flag):
+    def vtk(self, filename, volIndex):
+        """ display image in the panels
 
-        if type(flag) == int:
+            Parameters:
+            filename: vtk object (self.reader.GetOutput())
+            volIndex: int
+
+        """
+
+        if volIndex > 0:  # updates volume after applying a feature
             self.reader = vtk.vtkNIFTIImageReader()
-            self.reader.SetFileName(AppWindow.filepaths[flag])
+            self.reader.SetFileName(AppWindow.filepaths[volIndex])
             self.reader.Update()
 
         self.ren = vtk.vtkRenderer()
@@ -647,7 +668,7 @@ class AppWindow(QMainWindow):
         self.irenVol.Initialize()
         self.irenVol.Start()
 
-    def checkerboardFeature(self):
+    def checkerboardFeature(self):  # set up checkerboard layout
         fixedImageCheckerboard = QLabel('Fixed Image:')
         movingImageCheckerboard = QLabel('Moving Image:')
 
@@ -672,8 +693,7 @@ class AppWindow(QMainWindow):
 
         checkerboardButton.clicked.connect(self.showCheckerboard)
 
-
-    def showCheckerboard(self):
+    def showCheckerboard(self):  # applies checkerboard feature
         fixed = self.fixedImage.currentIndex()
         moving = self.movingImage.currentIndex()
 
@@ -693,24 +713,41 @@ class AppWindow(QMainWindow):
                 movingimg.ShallowCopy(AppWindow.allfiles[moving])
 
                 checkerboard = sitk.CheckerBoard(vtk2sitk(fixedimg), vtk2sitk(movingimg),
-                                             (size, size, size))
+                                                 (size, size, size))
 
                 self.saveFeature(sitk2vtk(checkerboard), fixed, 'c')
 
     def saveFeature(self, file, volumeImage, flag):
+        """ display image in the panels after applying a feature
+
+            Parameters:
+            file: vtk object
+            volumeImage: int (index position of image to be rendered in the volume
+            flag: string (determines which feature was applied
+
+        """
         AppWindow.feature_count += 1
         self.vIndex = volumeImage
         AppWindow.allfiles.append(file)
 
+        # add new image with feature applied to the file manager
+
         if flag == 'c':
-            AppWindow.filepaths.append('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
-            self.filesListWidget.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
-            self.fixedImage.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
-            self.movingImage.addItem('    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            AppWindow.filepaths.append(
+                '    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem(
+                '    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem(
+                '    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
+            self.movingImage.addItem(
+                '    checkerboard-t' + self.tileNumberInput.text() + '-' + str(AppWindow.feature_count))
         elif flag == 'o':
-            AppWindow.filepaths.append('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
-            self.filesListWidget.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
-            self.fixedImage.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            AppWindow.filepaths.append(
+                '    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.filesListWidget.addItem(
+                '    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
+            self.fixedImage.addItem(
+                '    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
             self.masks.addItem('    mask-overlay-a' + self.alphaBlendNumber.text() + '-' + str(AppWindow.feature_count))
         elif flag == 'd':
             AppWindow.filepaths.append('    difference-image-' + str(AppWindow.feature_count))
@@ -722,7 +759,7 @@ class AppWindow(QMainWindow):
 
         AppWindow.count = AppWindow.count + 1
 
-    def overlayFeature(self):
+    def overlayFeature(self):  # set up mask overlay layout
 
         baseImage = QLabel('Base:')
         maskImage = QLabel('Mask:')
@@ -754,7 +791,7 @@ class AppWindow(QMainWindow):
 
         overlayButton.clicked.connect(self.showOverlay)
 
-    def showOverlay(self):
+    def showOverlay(self):  # applies mask overlay feature
         fixedBase = self.fixedImage.currentIndex()
 
         for x in range(self.filesListWidget.count()):
@@ -777,7 +814,7 @@ class AppWindow(QMainWindow):
 
         self.saveFeature(sitk2vtk(sitkOverlay), fixedBase, 'o')
 
-    def differenceFeature(self):
+    def differenceFeature(self):  # set up difference image layout
         fixedDifferenceImage = QLabel('Fixed Image:')
         movingDifferenceImage = QLabel('Moving Image:')
 
@@ -797,7 +834,7 @@ class AppWindow(QMainWindow):
 
         differenceImageButton.clicked.connect(self.showDifferenceImage)
 
-    def showDifferenceImage(self):
+    def showDifferenceImage(self):  # applies difference image feature
         fixedDI = self.fixedImage.currentIndex()
         movingDI = self.movingImage.currentIndex()
 
@@ -817,7 +854,7 @@ class AppWindow(QMainWindow):
 
         self.saveFeature(imageMath.GetOutput(), fixedDI, 'd')
 
-    def plugin_handler(self):
+    def plugin_handler(self):  # handles the features available
         item = str(self.pluginsListWidget.selectedItems()[0].text())
         if item == 'Checkerboard':
             self.checkerboardFeature()
@@ -826,7 +863,7 @@ class AppWindow(QMainWindow):
         elif item == 'Difference Image':
             self.differenceFeature()
 
-    def docker_widget(self):
+    def docker_widget(self):  # right panel
 
         # first panel
         dockWid = QDockWidget('Features', self)
@@ -869,7 +906,7 @@ class AppWindow(QMainWindow):
         self.dockWidPanel.setFloating(False)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.dockWidPanel)
 
-    def docker_widgetR(self):
+    def docker_widgetFiles(self):  # left panel
 
         filesDock = QDockWidget('Data Manager', self)
         filesDock.setFixedWidth(300)
@@ -882,7 +919,7 @@ class AppWindow(QMainWindow):
         filesDock.setFloating(False)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, filesDock)
 
-    def listWidgetClicked(self, item):
+    def listWidgetClicked(self, item):  # handles switching between images in the data manager
         selectedRow = self.filesListWidget.currentRow()
         itemName = item.text()
 
@@ -893,7 +930,7 @@ class AppWindow(QMainWindow):
             self.reloadWindows()
             self.vtk(AppWindow.allfiles[selectedRow], selectedRow)
 
-    def metric_handler(self):
+    def metric_handler(self):  # handles the metrics available
         item = str(self.evalMetricsListWidget.selectedItems()[0].text())
         if item == 'Dice':
             self.diceFlag = True
@@ -902,7 +939,7 @@ class AppWindow(QMainWindow):
             self.hdFlag = True
             self.metrics()
 
-    def metrics(self):
+    def metrics(self):  # set up the metric layout
         fixedS = QLabel('Fixed:')
         movingS = QLabel('Moving:')
         resultMetric = QLabel('Score:')
@@ -934,7 +971,7 @@ class AppWindow(QMainWindow):
 
         metricButton.clicked.connect(self.showMetric)
 
-    def showMetric(self):
+    def showMetric(self):  # applying a metric
         setFixed = False
         setMoving = False
 
@@ -949,15 +986,21 @@ class AppWindow(QMainWindow):
                 break
 
         if self.diceFlag:
-            dice_score = compute_dice(sitk.GetArrayFromImage(vtk2sitk(mFixed)), sitk.GetArrayFromImage(vtk2sitk(mMoving)), [1])
+            dice_score = compute_dice(sitk.GetArrayFromImage(vtk2sitk(mFixed)),
+                                      sitk.GetArrayFromImage(vtk2sitk(mMoving)), [1])
             self.resultScore.setText(str(dice_score[0]))
         else:
             hd_score = compute_hd95(sitk.GetArrayFromImage(vtk2sitk(mFixed)),
-                                      sitk.GetArrayFromImage(vtk2sitk(mMoving)), [1])
+                                    sitk.GetArrayFromImage(vtk2sitk(mMoving)), [1])
             self.resultScore.setText(str(hd_score[0]))
 
-
     def add_dataset(self, filename):
+        """ manages files loaded including adding them to the data manager
+
+            Parameters:
+            filename: string (file location)
+
+        """
 
         name = filename.split("/")[-1]
         self.filesListWidget.addItem(name)
@@ -969,6 +1012,7 @@ class AppWindow(QMainWindow):
 
         self.binaryFlag = False
         AppWindow.count = AppWindow.count + 1
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':

@@ -207,7 +207,7 @@ def make_isotropic(
         spacing=None,
         default_value=0,
         standardize_axes=False,
-):
+    ):
     """
     Many file formats (e.g. jpg, png,...) expect the pixels to be isotropic, same
     spacing for all axes. Saving non-isotropic data in these formats will result in
@@ -274,6 +274,17 @@ def make_isotropic(
 
 
 def overlayMask(image, mask, mColormap, alphaNumber):
+    """ apply mask to image
+
+        Parameters:
+        image: sitk object
+        mask: sitk object
+        mColormap: string
+        alphaNumber: float
+
+        Returns: sitk object
+
+    """
     # Dictionary with functions mapping a scalar image to a three component vector image
     image_mappings = {'grey': lambda x: sitk.ScalarToRGBColormap(x, sitk.ScalarToRGBColormapImageFilter.Grey),
                       'Jet': lambda x: sitk.ScalarToRGBColormap(x, sitk.ScalarToRGBColormapImageFilter.Jet),
