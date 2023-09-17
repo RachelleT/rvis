@@ -1,9 +1,8 @@
 # This is a sample Python script.
 import os
 import sys
-import pydoc
 import SimpleITK as sitk
-from SimpleITK.utilities import sitk2vtk, vtk2sitk
+from SimpleITK.utilities.vtk import sitk2vtk, vtk2sitk
 import vtk
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMdiArea, QMdiSubWindow, \
     QLabel, QPushButton, QDockWidget, QGridLayout, QLineEdit, QWidget, \

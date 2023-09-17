@@ -1,7 +1,6 @@
 import itertools
 
 import numpy as np
-import cv2 as cv
 import SimpleITK as sitk
 import scipy.ndimage
 from scipy.ndimage import map_coordinates
