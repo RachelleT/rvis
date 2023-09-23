@@ -4,7 +4,7 @@ FROM python:3.11.5-bullseye
 RUN apt-get update 
 RUN apt install -y libgl1-mesa-glx
 RUN apt install -y libx11-6 libxext-dev libxrender-dev libxinerama-dev libxi-dev libxrandr-dev libxcursor-dev libxtst-dev
-RUN apt install -y libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev 
+RUN apt install -y libx11-xcb-dev libglu1-mesa-dev
 RUN apt install -y libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
 RUN apt install -y libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev
 RUN apt install -y libxkbcommon-x11-0
