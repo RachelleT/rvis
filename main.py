@@ -1,3 +1,10 @@
+#to avoid error 'could not load Qt platform plugin when running with docker'
+import PyQt5
+import os
+dirname = os.path.dirname(PyQt5.__file__)
+plugin_path = os.path.join(dirname, 'Qt5','plugins', 'platforms')
+os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plugin_path
+
 # This is a sample Python script.
 import os
 import sys

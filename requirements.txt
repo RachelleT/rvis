@@ -1,0 +1,6 @@
+SimpleITK
+vtk
+pyqt5
+numpy
+scipy
+SimpleITKUtilities
